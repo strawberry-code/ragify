@@ -2,6 +2,32 @@
 
 > 🇮🇹 **Versione Italiana**: [README.it.md](README.it.md)
 
+## Quick Start
+
+### Option 1: Interactive Installer (Recommended) 🚀
+
+Run the beautiful TUI installer built with [Charm](https://charm.sh):
+
+```bash
+cd installer
+go build -o rag-installer
+./rag-installer
+```
+
+The installer will:
+- ✓ Check system requirements
+- ✓ Install missing components
+- ✓ Configure everything automatically
+- ✓ Guide you through MCP client setup
+
+**[See installer documentation](installer/README.md)**
+
+### Option 2: Manual Installation
+
+Follow the [Installation from Scratch](#installation-from-scratch) section below.
+
+---
+
 ## Table of Contents
 1. [System Overview](#system-overview)
 2. [Components and Architecture](#components-and-architecture)

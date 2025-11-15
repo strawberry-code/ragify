@@ -2,6 +2,32 @@
 
 > 🇬🇧 **English Version**: [README.md](README.md)
 
+## Avvio Rapido
+
+### Opzione 1: Installer Interattivo (Consigliato) 🚀
+
+Esegui il bellissimo installer TUI costruito con [Charm](https://charm.sh):
+
+```bash
+cd installer
+go build -o rag-installer
+./rag-installer
+```
+
+L'installer:
+- ✓ Controlla i requisiti di sistema
+- ✓ Installa i componenti mancanti
+- ✓ Configura tutto automaticamente
+- ✓ Ti guida nella configurazione del client MCP
+
+**[Vedi documentazione installer](installer/README.md)**
+
+### Opzione 2: Installazione Manuale
+
+Segui la sezione [Installazione da Zero](#installazione-da-zero) qui sotto.
+
+---
+
 ## Indice
 1. [Panoramica del Sistema](#panoramica-del-sistema)
 2. [Componenti e Architettura](#componenti-e-architettura)
