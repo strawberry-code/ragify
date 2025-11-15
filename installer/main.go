@@ -540,18 +540,58 @@ func checkPython() bool {
 		return false
 	}
 	version := strings.TrimSpace(string(out))
-	return strings.Contains(version, "Python 3.")
+	
+	// Check for Python 3.10+
+	if !strings.Contains(version, "Python 3.") {
+		return false
+	}
+	
+	// Extract version number (e.g., "Python 3.10.5" -> "3.10")
+	parts := strings.Fields(version)
+	if len(parts) < 2 {
+		return false
+	}
+	versionNum := parts[1]
+	versionParts := strings.Split(versionNum, ".")
+	if len(versionParts) < 2 {
+		return false
+	}
+	
+	// Check major version (must be 3)
+	if versionParts[0] != "3" {
+		return false
+	}
+	
+	// Check minor version (must be >= 10 for Chonkie)
+	minorVersion := 0
+	fmt.Sscanf(versionParts[1], "%d", &minorVersion)
+	return minorVersion >= 10
 }
 
 func checkPythonDeps() bool {
-	// Check if requests and beautifulsoup4 are installed
+	// Check if all required packages are installed
 	cmd := exec.Command("pip3", "list")
 	out, err := cmd.Output()
 	if err != nil {
 		return false
 	}
 	output := string(out)
-	return strings.Contains(output, "requests") && strings.Contains(output, "beautifulsoup4")
+	
+	requiredPackages := []string{
+		"requests",
+		"beautifulsoup4",
+		"chonkie",
+		"semchunk",
+		"tiktoken",
+	}
+	
+	for _, pkg := range requiredPackages {
+		if !strings.Contains(output, pkg) {
+			return false
+		}
+	}
+	
+	return true
 }
 
 func checkDiskSpace() bool {
@@ -645,7 +685,7 @@ func installPythonDeps() (string, error) {
 	if err != nil {
 		return "Failed: " + string(output), err
 	}
-	return "Installed via pip3", nil
+	return "Installed requests, beautifulsoup4, chonkie, semchunk, tiktoken", nil
 }
 
 func (m model) View() string {
@@ -782,7 +822,7 @@ func (m model) checkView() string {
 		{"Docker/Podman", "docker"},
 		{"Ollama", "ollama"},
 		{"Node.js", "nodejs"},
-		{"Python 3.8+", "python"},
+		{"Python 3.10+", "python"},
 		{"Python Deps", "python_deps"},
 		{"Qdrant Image", "qdrant"},
 		{"MCP Server", "mcp_server"},
@@ -820,7 +860,7 @@ func (m model) selectView() string {
 		{"Ollama", "ollama", "Embeddings (nomic-embed-text)"},
 		{"Qdrant", "qdrant", "Vector database"},
 		{"MCP Server", "mcp_server", "Query interface"},
-		{"Python Deps", "python_deps", "requests + beautifulsoup4"},
+		{"Python Deps", "python_deps", "chonkie, semchunk, tiktoken, etc."},
 	}
 
 	for i, comp := range components {
