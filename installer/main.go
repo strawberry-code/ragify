@@ -54,12 +54,15 @@ var (
 type screen int
 
 const (
-	welcomeScreen screen = iota
+	mainMenuScreen screen = iota
+	welcomeScreen
 	checkScreen
 	selectScreen
 	installScreen
 	configScreen
 	completeScreen
+	doctorScreen
+	doctorServiceScreen
 )
 
 type model struct {
@@ -78,6 +81,14 @@ type model struct {
 	configClient   string
 	configApiKey   string
 	installLogs    []string
+	serviceStatus  map[string]serviceInfo
+	doctorChecking bool
+}
+
+type serviceInfo struct {
+	installed bool
+	running   bool
+	enabled   bool
 }
 
 type checkResult struct {
@@ -93,13 +104,17 @@ type installStepMsg struct {
 
 type installComplete struct{}
 
+type doctorCheckComplete struct {
+	services map[string]serviceInfo
+}
+
 func initialModel() model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF69B4"))
 
 	return model{
-		currentScreen: welcomeScreen,
+		currentScreen: mainMenuScreen,
 		cursor:        0,
 		checks:        make(map[string]bool),
 		selected: map[string]bool{
@@ -109,11 +124,13 @@ func initialModel() model {
 			"mcp_server":  true,
 			"python_deps": true,
 		},
-		installing:    false,
-		installStatus: make(map[string]string),
-		spinner:       s,
-		progress:      progress.New(progress.WithDefaultGradient()),
-		installLogs:   []string{},
+		installing:     false,
+		installStatus:  make(map[string]string),
+		spinner:        s,
+		progress:       progress.New(progress.WithDefaultGradient()),
+		installLogs:    []string{},
+		serviceStatus:  make(map[string]serviceInfo),
+		doctorChecking: false,
 	}
 }
 
@@ -128,6 +145,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			if m.currentScreen != installScreen {
 				return m, tea.Quit
+			}
+		case "m":
+			if m.currentScreen == doctorServiceScreen {
+				m.currentScreen = mainMenuScreen
+				m.cursor = 0
 			}
 		case "enter":
 			return m.handleEnter()
@@ -156,7 +178,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case checkResult:
 		m.checks[msg.component] = msg.installed
-		if len(m.checks) >= 5 {
+		if len(m.checks) >= 8 {
 			time.Sleep(500 * time.Millisecond)
 			m.currentScreen = selectScreen
 			m.cursor = 0
@@ -176,6 +198,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case installComplete:
 		m.currentScreen = configScreen
 		m.cursor = 0
+
+	case doctorCheckComplete:
+		m.serviceStatus = msg.services
+		m.doctorChecking = false
+		m.currentScreen = doctorServiceScreen
+		m.cursor = 0
 	}
 
 	return m, nil
@@ -183,6 +211,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.currentScreen {
+	case mainMenuScreen:
+		switch m.cursor {
+		case 0: // Installer
+			m.currentScreen = welcomeScreen
+			m.cursor = 0
+		case 1: // Doctor
+			m.currentScreen = doctorScreen
+			m.doctorChecking = true
+			return m, tea.Batch(m.spinner.Tick, m.runDoctorChecks())
+		}
+		return m, nil
 	case welcomeScreen:
 		m.currentScreen = checkScreen
 		return m, m.runChecks()
@@ -200,6 +239,11 @@ func (m model) handleEnter() (tea.Model, tea.Cmd) {
 		return m, nil
 	case completeScreen:
 		return m, tea.Quit
+	case doctorServiceScreen:
+		// Continue/activate selected services logic here
+		m.currentScreen = mainMenuScreen
+		m.cursor = 0
+		return m, m.activateSelectedServices()
 	}
 	return m, nil
 }
@@ -212,14 +256,27 @@ func (m model) handleSpace() (tea.Model, tea.Cmd) {
 			m.selected[component] = !m.selected[component]
 		}
 	}
+	if m.currentScreen == doctorServiceScreen {
+		services := []string{"docker", "ollama", "qdrant", "mcp_server"}
+		if m.cursor < len(services) {
+			service := services[m.cursor]
+			info := m.serviceStatus[service]
+			info.enabled = !info.enabled
+			m.serviceStatus[service] = info
+		}
+	}
 	return m, nil
 }
 
 func (m model) getMaxCursor() int {
 	switch m.currentScreen {
+	case mainMenuScreen:
+		return 1
 	case selectScreen:
 		return 4
 	case configScreen:
+		return 3
+	case doctorServiceScreen:
 		return 3
 	default:
 		return 0
@@ -242,7 +299,72 @@ func (m model) runNextCheck() tea.Cmd {
 		case 3:
 			return checkResult{component: "python", installed: checkPython()}
 		case 4:
+			return checkResult{component: "python_deps", installed: checkPythonDeps()}
+		case 5:
+			return checkResult{component: "qdrant", installed: checkQdrantInstalled()}
+		case 6:
+			return checkResult{component: "mcp_server", installed: checkMCPServerInstalled()}
+		case 7:
 			return checkResult{component: "disk", installed: checkDiskSpace()}
+		}
+		return nil
+	}
+}
+
+func (m model) runDoctorChecks() tea.Cmd {
+	return func() tea.Msg {
+		services := make(map[string]serviceInfo)
+
+		// Check Docker
+		services["docker"] = serviceInfo{
+			installed: checkDocker(),
+			running:   checkDockerRunning(),
+			enabled:   false,
+		}
+
+		// Check Ollama
+		services["ollama"] = serviceInfo{
+			installed: checkOllama(),
+			running:   checkOllamaRunning(),
+			enabled:   false,
+		}
+
+		// Check Qdrant
+		services["qdrant"] = serviceInfo{
+			installed: checkQdrantInstalled(),
+			running:   checkQdrantRunning(),
+			enabled:   false,
+		}
+
+		// Check MCP Server
+		services["mcp_server"] = serviceInfo{
+			installed: checkMCPServerInstalled(),
+			running:   checkMCPServerRunning(),
+			enabled:   false,
+		}
+
+		return doctorCheckComplete{services: services}
+	}
+}
+
+func (m model) activateSelectedServices() tea.Cmd {
+	return func() tea.Msg {
+		runtime := getContainerRuntime()
+		for service, info := range m.serviceStatus {
+			if info.enabled && info.installed && !info.running {
+				switch service {
+				case "docker":
+					if runtime == "docker" {
+						exec.Command("sudo", "systemctl", "start", "docker").Run()
+					} else if runtime == "podman" {
+						exec.Command("sudo", "systemctl", "start", "podman").Run()
+					}
+				case "ollama":
+					exec.Command("systemctl", "start", "ollama").Run()
+				case "qdrant":
+					installQdrant()
+				}
+			}
 		}
 		return nil
 	}
@@ -279,13 +401,13 @@ func (m model) installNext() tea.Cmd {
 		if len(installQueue) == 0 {
 			return installComplete{}
 		}
-		
+
 		component := installQueue[0]
 		installQueue = installQueue[1:]
-		
+
 		var err error
 		var status string
-		
+
 		switch component {
 		case "docker":
 			status, err = installDocker()
@@ -298,24 +420,107 @@ func (m model) installNext() tea.Cmd {
 		case "python_deps":
 			status, err = installPythonDeps()
 		}
-		
+
 		return installStepMsg{component: component, status: status, err: err}
 	}
 }
 
+// Global variable to store preferred container runtime
+var containerRuntime string
+
+// Get container runtime (podman preferred, docker as fallback)
+func getContainerRuntime() string {
+	if containerRuntime != "" {
+		return containerRuntime
+	}
+	
+	// Try podman first
+	if exec.Command("podman", "--version").Run() == nil {
+		containerRuntime = "podman"
+		return containerRuntime
+	}
+	
+	// Fallback to docker
+	if exec.Command("docker", "--version").Run() == nil {
+		containerRuntime = "docker"
+		return containerRuntime
+	}
+	
+	return ""
+}
+
 // Check functions
 func checkDocker() bool {
-	cmd := exec.Command("docker", "--version")
+	return getContainerRuntime() != ""
+}
+
+func checkDockerRunning() bool {
+	runtime := getContainerRuntime()
+	if runtime == "" {
+		return false
+	}
+	cmd := exec.Command(runtime, "ps")
 	return cmd.Run() == nil
 }
 
 func checkOllama() bool {
+	return checkOllamaRunning()
+}
+
+func checkOllamaRunning() bool {
 	resp, err := http.Get("http://localhost:11434/api/tags")
 	if err != nil {
 		return false
 	}
 	defer resp.Body.Close()
 	return resp.StatusCode == 200
+}
+
+func checkQdrantInstalled() bool {
+	runtime := getContainerRuntime()
+	if runtime == "" {
+		return false
+	}
+	// Check if qdrant/qdrant image exists
+	cmd := exec.Command(runtime, "images", "-q", "qdrant/qdrant")
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	// Also check docker.io/qdrant/qdrant for podman
+	if len(strings.TrimSpace(string(out))) > 0 {
+		return true
+	}
+	cmd = exec.Command(runtime, "images", "-q", "docker.io/qdrant/qdrant")
+	out, err = cmd.Output()
+	if err != nil {
+		return false
+	}
+	return len(strings.TrimSpace(string(out))) > 0
+}
+
+func checkQdrantRunning() bool {
+	resp, err := http.Get("http://localhost:6333/")
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == 200
+}
+
+func checkMCPServerInstalled() bool {
+	// Check npm global list with depth 0
+	cmd := exec.Command("npm", "list", "-g", "--depth=0")
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(out), "@qpd-v/mcp-server-ragdocs")
+}
+
+func checkMCPServerRunning() bool {
+	cmd := exec.Command("pgrep", "-f", "mcp-server-ragdocs")
+	return cmd.Run() == nil
 }
 
 func checkNodeJS() bool {
@@ -336,6 +541,17 @@ func checkPython() bool {
 	}
 	version := strings.TrimSpace(string(out))
 	return strings.Contains(version, "Python 3.")
+}
+
+func checkPythonDeps() bool {
+	// Check if requests and beautifulsoup4 are installed
+	cmd := exec.Command("pip3", "list")
+	out, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+	output := string(out)
+	return strings.Contains(output, "requests") && strings.Contains(output, "beautifulsoup4")
 }
 
 func checkDiskSpace() bool {
@@ -390,13 +606,18 @@ func installOllama() (string, error) {
 }
 
 func installQdrant() (string, error) {
-	cmd := exec.Command("docker", "run", "-d",
+	runtime := getContainerRuntime()
+	if runtime == "" {
+		return "No container runtime found", fmt.Errorf("neither podman nor docker is available")
+	}
+	
+	cmd := exec.Command(runtime, "run", "-d",
 		"--name", "qdrant",
 		"-p", "6333:6333",
 		"-p", "6334:6334",
 		"-v", "./qdrant_storage:/qdrant/storage",
 		"qdrant/qdrant:latest")
-	
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		if strings.Contains(string(output), "already in use") {
@@ -404,9 +625,9 @@ func installQdrant() (string, error) {
 		}
 		return "Failed", err
 	}
-	
+
 	time.Sleep(2 * time.Second)
-	return "Started in Docker", nil
+	return fmt.Sprintf("Started in %s", runtime), nil
 }
 
 func installMCPServer() (string, error) {
@@ -429,6 +650,8 @@ func installPythonDeps() (string, error) {
 
 func (m model) View() string {
 	switch m.currentScreen {
+	case mainMenuScreen:
+		return m.mainMenuView()
 	case welcomeScreen:
 		return m.welcomeView()
 	case checkScreen:
@@ -441,8 +664,39 @@ func (m model) View() string {
 		return m.configView()
 	case completeScreen:
 		return m.completeView()
+	case doctorScreen:
+		return m.doctorView()
+	case doctorServiceScreen:
+		return m.doctorServiceView()
 	}
 	return ""
+}
+
+func (m model) mainMenuView() string {
+	s := "\n"
+	s += titleStyle.Render("🚀 Self-Hosted RAG Platform") + "\n\n"
+	s += subtitleStyle.Render("Main Menu") + "\n\n"
+
+	options := []string{
+		"Installer - Install and configure RAG platform",
+		"Doctor - Check system health and services status",
+	}
+
+	for i, option := range options {
+		cursor := " "
+		if m.cursor == i {
+			cursor = ">"
+		}
+
+		line := fmt.Sprintf("%s %s", cursor, option)
+		if m.cursor == i {
+			line = selectedStyle.Render(line)
+		}
+		s += lipgloss.NewStyle().MarginLeft(2).Render(line) + "\n"
+	}
+
+	s += "\n" + helpStyle.Render("↑/↓: navigate • enter: select • q: quit") + "\n"
+	return s
 }
 
 func (m model) welcomeView() string {
@@ -450,14 +704,70 @@ func (m model) welcomeView() string {
 	s += titleStyle.Render("🚀 Self-Hosted RAG Platform Installer") + "\n\n"
 	s += subtitleStyle.Render("Welcome to the interactive installation wizard!") + "\n\n"
 	s += lipgloss.NewStyle().MarginLeft(2).Render(
-		"This installer will help you set up:\n" +
-			"  • Qdrant (Vector Database)\n" +
-			"  • Ollama (Embeddings Model)\n" +
-			"  • MCP Server (Query Interface)\n" +
-			"  • Python Dependencies\n" +
+		"This installer will help you set up:\n"+
+			"  • Qdrant (Vector Database)\n"+
+			"  • Ollama (Embeddings Model)\n"+
+			"  • MCP Server (Query Interface)\n"+
+			"  • Python Dependencies\n"+
 			"  • Optional: Client Configuration\n",
 	) + "\n\n"
 	s += helpStyle.Render("Press Enter to start • q to quit") + "\n"
+	return s
+}
+
+func (m model) doctorView() string {
+	s := "\n"
+	s += titleStyle.Render("🩺 System Health Check") + "\n\n"
+	s += lipgloss.NewStyle().MarginLeft(2).Render(m.spinner.View()+" Checking all services...") + "\n\n"
+	s += helpStyle.Render("Please wait...") + "\n"
+	return s
+}
+
+func (m model) doctorServiceView() string {
+	s := "\n"
+	s += titleStyle.Render("🩺 Service Status") + "\n\n"
+
+	services := []struct {
+		name string
+		key  string
+	}{
+		{"Docker", "docker"},
+		{"Ollama", "ollama"},
+		{"Qdrant", "qdrant"},
+		{"MCP Server", "mcp_server"},
+	}
+
+	for i, svc := range services {
+		cursor := " "
+		if m.cursor == i {
+			cursor = ">"
+		}
+
+		info := m.serviceStatus[svc.key]
+
+		checkbox := "☐"
+		if info.enabled {
+			checkbox = checkboxStyle.Render("☑")
+		}
+
+		installedStatus := errorStyle.Render("✗ Not installed")
+		if info.installed {
+			installedStatus = successStyle.Render("✓ Installed")
+		}
+
+		runningStatus := errorStyle.Render("✗ Not running")
+		if info.running {
+			runningStatus = successStyle.Render("✓ Running")
+		}
+
+		line := fmt.Sprintf("%s %s %-15s │ %s │ %s", cursor, checkbox, svc.name, installedStatus, runningStatus)
+		if m.cursor == i {
+			line = selectedStyle.Render(line)
+		}
+		s += lipgloss.NewStyle().MarginLeft(2).Render(line) + "\n"
+	}
+
+	s += "\n" + helpStyle.Render("↑/↓: navigate • space: toggle service • enter: activate selected • m: main menu • q: quit") + "\n"
 	return s
 }
 
@@ -469,10 +779,13 @@ func (m model) checkView() string {
 		name string
 		key  string
 	}{
-		{"Docker", "docker"},
+		{"Docker/Podman", "docker"},
 		{"Ollama", "ollama"},
 		{"Node.js", "nodejs"},
 		{"Python 3.8+", "python"},
+		{"Python Deps", "python_deps"},
+		{"Qdrant Image", "qdrant"},
+		{"MCP Server", "mcp_server"},
 		{"Disk Space (5GB+)", "disk"},
 	}
 
@@ -480,7 +793,7 @@ func (m model) checkView() string {
 		status := m.spinner.View() + " Checking..."
 		if installed, ok := m.checks[comp.key]; ok {
 			if installed {
-				status = checkboxStyle.Render("✓ Installed")
+				status = checkboxStyle.Render("✓ Found")
 			} else {
 				status = warningStyle.Render("⚠ Not found (will install)")
 			}
@@ -503,10 +816,10 @@ func (m model) selectView() string {
 		key  string
 		desc string
 	}{
-		{"Docker", "docker", "Required for Qdrant"},
-		{"Ollama", "ollama", "Required for embeddings (nomic-embed-text)"},
-		{"Qdrant", "qdrant", "Vector database (Docker container)"},
-		{"MCP Server", "mcp_server", "Query interface (@qpd-v/mcp-server-ragdocs)"},
+		{"Docker/Podman", "docker", "Container runtime"},
+		{"Ollama", "ollama", "Embeddings (nomic-embed-text)"},
+		{"Qdrant", "qdrant", "Vector database"},
+		{"MCP Server", "mcp_server", "Query interface"},
 		{"Python Deps", "python_deps", "requests + beautifulsoup4"},
 	}
 
@@ -521,13 +834,45 @@ func (m model) selectView() string {
 			checkbox = checkboxStyle.Render("☑")
 		}
 
-		// Show if already installed
-		installed := ""
+		// Show detailed status
+		var statusParts []string
+		
+		// Check if installed
 		if m.checks[comp.key] {
-			installed = checkboxStyle.Render(" (already installed)")
+			statusParts = append(statusParts, successStyle.Render("✓ Installed"))
+		} else {
+			statusParts = append(statusParts, warningStyle.Render("✗ Not installed"))
+		}
+		
+		// Check if running (only for services)
+		if comp.key == "docker" {
+			if checkDockerRunning() {
+				statusParts = append(statusParts, successStyle.Render("✓ Running"))
+			} else {
+				statusParts = append(statusParts, errorStyle.Render("✗ Not running"))
+			}
+		} else if comp.key == "ollama" {
+			if checkOllamaRunning() {
+				statusParts = append(statusParts, successStyle.Render("✓ Running"))
+			} else {
+				statusParts = append(statusParts, errorStyle.Render("✗ Not running"))
+			}
+		} else if comp.key == "qdrant" {
+			if checkQdrantRunning() {
+				statusParts = append(statusParts, successStyle.Render("✓ Running"))
+			} else {
+				statusParts = append(statusParts, errorStyle.Render("✗ Not running"))
+			}
+		} else if comp.key == "mcp_server" {
+			if checkMCPServerRunning() {
+				statusParts = append(statusParts, successStyle.Render("✓ Running"))
+			} else {
+				statusParts = append(statusParts, errorStyle.Render("✗ Not running"))
+			}
 		}
 
-		line := fmt.Sprintf("%s %s %-15s %s%s", cursor, checkbox, comp.name, comp.desc, installed)
+		status := strings.Join(statusParts, " │ ")
+		line := fmt.Sprintf("%s %s %-15s %-30s │ %s", cursor, checkbox, comp.name, comp.desc, status)
 		if m.cursor == i {
 			line = selectedStyle.Render(line)
 		}
@@ -588,17 +933,17 @@ func (m model) completeView() string {
 	s += successStyle.Render("✨ Installation Complete!") + "\n\n"
 
 	s += lipgloss.NewStyle().MarginLeft(2).Render(
-		"Your RAG platform is ready to use!\n\n" +
-			"Quick start:\n" +
-			"  1. Index documentation:\n" +
-			"     cd /Users/ccavo001/github/strawberry-code/self-hosted-llm-rag\n" +
-			"     python3 docs_server.py /path/to/docs --port 8000 &\n" +
-			"     python3 local_docs_url_generator.py /path/to/docs -o urls.txt\n" +
-			"     python3 add_urls_to_qdrant.py urls.txt\n\n" +
-			"  2. Query via MCP (in Crush or other client):\n" +
-			"     mcp_ragdocs_search_documentation query=\"your question\" limit=5\n\n" +
-			"  3. Test system:\n" +
-			"     python3 test_ragdocs.py\n\n" +
+		"Your RAG platform is ready to use!\n\n"+
+			"Quick start:\n"+
+			"  1. Index documentation:\n"+
+			"     cd /Users/ccavo001/github/strawberry-code/self-hosted-llm-rag\n"+
+			"     python3 docs_server.py /path/to/docs --port 8000 &\n"+
+			"     python3 local_docs_url_generator.py /path/to/docs -o urls.txt\n"+
+			"     python3 add_urls_to_qdrant.py urls.txt\n\n"+
+			"  2. Query via MCP (in Crush or other client):\n"+
+			"     mcp_ragdocs_search_documentation query=\"your question\" limit=5\n\n"+
+			"  3. Test system:\n"+
+			"     python3 test_ragdocs.py\n\n"+
 			"Read README.md for full documentation.\n",
 	) + "\n"
 
