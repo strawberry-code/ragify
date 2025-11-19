@@ -112,9 +112,17 @@ Documenti Locali
 - **Output**: File di testo con un URL per riga
 
 ### 6. **add_urls_to_qdrant.py** - Script di Indicizzazione
-- **Scopo**: Scarica documenti, li chunka, genera embeddings e li carica su Qdrant
-- **Chunking**: Divide testi in pezzi da ~1000 caratteri
-- **Batch size**: 10 documenti alla volta
+- **Scopo**: Scarica documenti, li chunka usando analisi semantica, genera embeddings e li carica su Qdrant
+- **Strategia di Chunking**: Chunking semantico a due livelli
+  - **Livello 1 (Chonkie)**: Macro-blocchi semantici (~512 token) che rispettano la struttura del documento
+  - **Livello 2 (semchunk)**: Chunks granulari (400-600 token) ottimizzati per embeddings
+  - **Token-based**: Usa tiktoken per conteggio token accurato
+  - **Re-chunking automatico**: Chunks troppo grandi divisi automaticamente per rispettare limiti del modello (8192 token)
+- **Meccanismi di fallback**: Se le librerie semantiche non sono disponibili, degrada gradualmente a chunking basato su caratteri
+- **Opzioni CLI**:
+  - `--chunk-size`: Dimensione target chunk in token (default: 512)
+  - `--overlap`: Sovrapposizione tra chunks in token (default: 51)
+  - `--verbose`: Logging dettagliato
 - **Metadata**:
   - `_type`: "DocumentChunk" (richiesto da MCP)
   - `text`: Contenuto del chunk
@@ -123,6 +131,10 @@ Documenti Locali
   - `timestamp`: Data di indicizzazione
   - `chunk_index`: Indice del chunk
   - `total_chunks`: Totale chunks del documento
+  - `semantic_block_index`: Macro-blocco dal chunking di Livello 1
+  - `token_count`: Conteggio token effettivo
+  - `chunking_method`: Metodo usato ('semantic', 'fallback', etc.)
+  - `embedding_model`: Modello usato per gli embeddings
 
 ---
 
@@ -141,8 +153,8 @@ Documenti Locali
    - [Installazione Node.js](https://nodejs.org/)
 
 4. **Python 3**
-   - Versione 3.8 o superiore
-   - Librerie: `requests`, `beautifulsoup4`
+   - Versione 3.10 o superiore (richiesto per chunking semantico)
+   - Librerie: vedi `requirements.txt`
 
 5. **Crush CLI** (o altro client MCP compatibile)
 
@@ -296,23 +308,41 @@ Aggiungi la configurazione tramite l'interfaccia di Cline o modifica manualmente
 ### Passo 5: Installa Dipendenze Python
 
 ```bash
+# Verifica versione Python (richiesto 3.10+)
+python3 --version
+
 # Crea ambiente virtuale (opzionale ma consigliato)
 python3 -m venv venv
 source venv/bin/activate  # Linux/macOS
 # venv\Scripts\activate   # Windows
 
 # Installa dipendenze
-pip install requests beautifulsoup4
+pip install -r requirements.txt
 ```
+
+**Pacchetti richiesti** (da `requirements.txt`):
+- `requests` - Richieste HTTP
+- `beautifulsoup4` - Parsing HTML
+- `qdrant-client` - Client database vettoriale Qdrant
+- `chonkie>=0.1.0` - Macro-chunking semantico
+- `semchunk>=2.0.0` - Chunking semantico granulare
+- `tiktoken>=0.5.0` - Conteggio token per modelli OpenAI
 
 ### Passo 6: Scarica gli Script di Supporto
 
-Clona o copia questi file nella tua directory di lavoro:
+Clona questo repository o copia questi file nella tua directory di lavoro:
 
+**Script principali:**
 - `docs_server.py` - Server HTTP per documentazione
 - `local_docs_url_generator.py` - Generatore URL da filesystem
-- `add_urls_to_qdrant.py` - Script di indicizzazione
+- `add_urls_to_qdrant.py` - Script di indicizzazione con chunking semantico
 - `reset_qdrant.py` - Reset collezione Qdrant
+
+**Moduli libreria** (package `lib/`):
+- `lib/text_cleaning.py` - Normalizzazione testo e validazione qualità
+- `lib/chunking.py` - Motore di chunking semantico a due livelli
+- `lib/embedding.py` - Generazione embeddings con re-chunking automatico
+- `lib/qdrant_operations.py` - Operazioni database Qdrant
 
 ### Passo 7: Verifica l'Installazione
 
@@ -407,28 +437,59 @@ http://localhost:8000/guides/installation.md
 #### Passo 4: Indicizza i Documenti
 
 ```bash
-# Carica i documenti su Qdrant
+# Carica i documenti su Qdrant con chunking semantico (consigliato)
 python3 add_urls_to_qdrant.py urls.txt
+
+# Uso avanzato con parametri personalizzati
+python3 add_urls_to_qdrant.py urls.txt --chunk-size 600 --overlap 60 --verbose
 ```
+
+**Opzioni CLI**:
+- `--chunk-size SIZE`: Dimensione target chunk in token (default: 512)
+- `--overlap SIZE`: Sovrapposizione tra chunks in token (default: 51, ~10%)
+- `--verbose`: Mostra informazioni di elaborazione dettagliate
 
 **Output**:
 ```
-📚 Caricamento documenti da: urls.txt
-Trovati 125 URL da processare
+📚 Avvio pipeline di indicizzazione documenti
+================================================================================
+File input: urls.txt
+Dimensione chunk: 512 token | Sovrapposizione: 51 token
+================================================================================
 
-[1/125] http://localhost:8000/getting-started.md
-  ✓ Scaricato (2.4 KB)
-  ✓ Estratto 3 chunks
-  ✓ Caricato su Qdrant
+[1/125] Elaborazione: http://localhost:8000/getting-started.md
+  ✓ Scaricato (2.431 caratteri)
+  ✓ Pulito (2.387 caratteri dopo normalizzazione)
+  ✓ Chunking semantico: 1 macro-blocco → 3 chunks finali
+  ✓ Statistiche token: avg=445, min=412, max=487 token
+  ✓ Embeddings generati e caricati
 
-[2/125] http://localhost:8000/api/overview.md
+[2/125] Elaborazione: http://localhost:8000/api/overview.md
 ...
 
-✨ Completato!
-   - URL processati: 125
-   - Chunks totali: 1,847
-   - Tempo totale: 3m 42s
+================================================================================
+📊 Statistiche Indicizzazione
+================================================================================
+URL elaborati:      125 / 125 (100.0%)
+Caratteri totali:   1.245.890 (grezzo) → 1.238.122 (pulito)
+Macro-blocchi:      387 blocchi semantici
+Chunks finali:      1.847 chunks pronti per embedding
+Distribuzione token: avg=478, min=402, max=598 token
+Tasso successo:     98.4% (123 successi, 2 falliti)
+Tempo totale:       4m 18s
+================================================================================
 ```
+
+**Cosa succede durante l'indicizzazione**:
+1. **Download**: Scarica il contenuto HTML da ogni URL
+2. **Estrazione testo**: Estrae il testo usando BeautifulSoup
+3. **Pulizia**: Normalizzazione Unicode, pulizia whitespace, rimozione boilerplate
+4. **Validazione qualità**: Verifica lunghezza minima e diversità caratteri
+5. **Chunking semantico (Livello 1)**: Chonkie crea macro-blocchi rispettando la struttura del documento
+6. **Chunking fine (Livello 2)**: semchunk divide i blocchi in dimensioni ottimali per embedding
+7. **Validazione token**: Assicura che tutti i chunks rispettino i limiti del modello (8192 token)
+8. **Generazione embeddings**: Crea vettori usando Ollama nomic-embed-text
+9. **Upload**: Archivia vettori + metadata in Qdrant
 
 #### Passo 5: Verifica Indicizzazione
 
@@ -585,7 +646,29 @@ Questo errore indica che i documenti in Qdrant non hanno i metadata richiesti.
 
 1. **Verifica il modello di embedding**: Assicurati che Ollama stia usando `nomic-embed-text`
 2. **Aumenta il limite di risultati**: Prova `limit=10` o `limit=20`
-3. **Riduci la dimensione dei chunk**: Modifica `CHUNK_SIZE` in `add_urls_to_qdrant.py`
+3. **Regola la dimensione dei chunk**: Re-indicizza con un parametro `--chunk-size` diverso
+   ```bash
+   python3 add_urls_to_qdrant.py urls.txt --chunk-size 400  # Chunks più piccoli
+   python3 add_urls_to_qdrant.py urls.txt --chunk-size 600  # Chunks più grandi
+   ```
+4. **Verifica metodo di chunking**: Controlla i log per assicurarti che il chunking semantico funzioni (non stia usando il fallback basato su caratteri)
+
+#### Chunking semantico non funziona
+
+Se vedi "Chonkie not available, using fallback" nei log:
+
+1. **Verifica versione Python**: Deve essere 3.10 o superiore
+   ```bash
+   python3 --version
+   ```
+2. **Reinstalla le dipendenze**:
+   ```bash
+   pip install --upgrade chonkie semchunk tiktoken
+   ```
+3. **Controlla errori di import**:
+   ```bash
+   python3 -c "import chonkie; import semchunk; import tiktoken; print('Tutto OK')"
+   ```
 
 ---
 
@@ -597,8 +680,17 @@ Questo errore indica che i documenti in Qdrant non hanno i metadata richiesti.
 |------|-------|-----|
 | `docs_server.py` | Server HTTP per documentazione locale | `python3 docs_server.py /path/to/docs` |
 | `local_docs_url_generator.py` | Genera lista URL da filesystem | `python3 local_docs_url_generator.py /path/to/docs -o urls.txt` |
-| `add_urls_to_qdrant.py` | Indicizza documenti su Qdrant | `python3 add_urls_to_qdrant.py urls.txt` |
+| `add_urls_to_qdrant.py` | Indicizza documenti con chunking semantico | `python3 add_urls_to_qdrant.py urls.txt [--chunk-size SIZE] [--overlap SIZE] [--verbose]` |
 | `reset_qdrant.py` | Reset collezione Qdrant | `python3 reset_qdrant.py` |
+
+### Moduli Libreria (package `lib/`)
+
+| File | Scopo | Funzioni Chiave |
+|------|-------|-----------------|
+| `lib/text_cleaning.py` | Normalizzazione testo e validazione qualità | `clean_text()`, `remove_boilerplate()`, `validate_text_quality()` |
+| `lib/chunking.py` | Chunking semantico a due livelli | `semantic_chunk_text()`, `fine_chunk_text()`, `count_tokens()`, `validate_chunk_size()` |
+| `lib/embedding.py` | Generazione embeddings con validazione | `get_embedding()`, `safe_embed_chunk()`, `batch_embed_chunks()` |
+| `lib/qdrant_operations.py` | Operazioni database Qdrant | `create_point()`, `upload_points()`, `batch_upload_chunks()` |
 
 ### Script di Test (opzionali)
 
@@ -606,12 +698,6 @@ Questo errore indica che i documenti in Qdrant non hanno i metadata richiesti.
 |------|-------|
 | `query_ragdocs.py` | Test query dirette a Qdrant (bypass MCP) |
 | `test_ragdocs.py` | Test completo del sistema |
-
-### File di Migrazione (deprecati)
-
-| File | Note |
-|------|------|
-| `migrate_qdrant_payloads.py` | Non più necessario - `add_urls_to_qdrant.py` ora genera i metadata corretti |
 
 ---
 
@@ -630,7 +716,11 @@ Ogni documento indicizzato ha la seguente struttura in Qdrant:
     "title": "Titolo del documento",
     "timestamp": "2025-11-14T12:00:00.000000",
     "chunk_index": 0,
-    "total_chunks": 5
+    "total_chunks": 5,
+    "semantic_block_index": 0,
+    "token_count": 478,
+    "chunking_method": "semantic",
+    "embedding_model": "nomic-embed-text"
   }
 }
 ```
@@ -641,6 +731,12 @@ Ogni documento indicizzato ha la seguente struttura in Qdrant:
 - `url`: URL sorgente
 - `title`: Titolo
 - `timestamp`: ISO 8601 timestamp
+
+**Campi aggiuntivi** (metadata chunking semantico):
+- `semantic_block_index`: Indice del macro-blocco dal chunking di Livello 1
+- `token_count`: Conteggio token effettivo per questo chunk
+- `chunking_method`: Strategia di chunking usata (`"semantic"`, `"fallback"`, etc.)
+- `embedding_model`: Modello usato per generare gli embeddings
 
 ---
 
@@ -656,5 +752,78 @@ Ogni documento indicizzato ha la seguente struttura in Qdrant:
 
 Per problemi o suggerimenti, apri una issue nel repository del progetto.
 
-**Versione documentazione**: 1.0  
+---
+
+## Funzionalità Avanzate
+
+### Architettura Chunking Semantico
+
+La piattaforma usa un sofisticato approccio di chunking semantico a due livelli:
+
+#### Livello 1: Chunking Macro (Chonkie)
+- **Scopo**: Dividere documenti in macro-blocchi semanticamente coerenti
+- **Strategia**: Rispetta la struttura del documento (paragrafi, sezioni, interruzioni logiche)
+- **Dimensione target**: ~512 token per blocco
+- **Beneficio**: Preserva il contesto semantico di alto livello
+
+#### Livello 2: Chunking Granulare (semchunk)
+- **Scopo**: Dividere i macro-blocchi in chunks ottimali per embedding
+- **Strategia**: Divisione basata su token con consapevolezza dei confini semantici
+- **Dimensione target**: 400-600 token per chunk
+- **Beneficio**: Ottimale per embeddings vettoriali mantenendo coerenza semantica
+
+#### Token-based vs Caratteri
+
+**Perché chunking basato su token?**
+- I modelli di embedding hanno limiti di token (nomic-embed-text: 8192 token)
+- Previene errori di overflow del modello
+- Rappresentazione più accurata dell'input del modello
+- Migliore consistenza semantica tra i chunks
+
+**Validazione e re-chunking automatico:**
+- Tutti i chunks validati contro i limiti token del modello
+- Chunks troppo grandi automaticamente divisi al 50% della dimensione massima
+- Conteggio token usando `tiktoken` (tokenizer di OpenAI)
+
+#### Meccanismi di Fallback
+
+Il sistema degrada gradualmente se le librerie semantiche non sono disponibili:
+1. **Chonkie non disponibile** → Tratta l'intero documento come singolo macro-blocco
+2. **Semchunk non disponibile** → Fallback a finestra scorrevole basata su caratteri
+3. **Entrambi non disponibili** → Chunking semplice basato su caratteri (~1000 caratteri)
+
+I log indicano quale metodo è attivo per trasparenza.
+
+### Ottimizzazione Prestazioni
+
+#### Ottimizzazione Dimensione Chunk
+
+**Chunks più piccoli (300-400 token)**:
+- ✅ Risultati più precisi
+- ✅ Migliori per query specifiche
+- ❌ Più chunks = database più grande
+- ❌ Indicizzazione più lenta
+
+**Chunks più grandi (500-600 token)**:
+- ✅ Più contesto per risultato
+- ✅ Meno chunks = database più piccolo
+- ✅ Indicizzazione più veloce
+- ❌ Matching meno preciso
+
+**Punto di partenza consigliato**: 512 token (bilanciato)
+
+#### Configurazione Sovrapposizione
+
+**Scopo**: Previene che informazioni importanti vengano divise tra confini di chunk
+
+**Valori consigliati**:
+- Minimo: 5% (`--overlap 25` per chunks di 512 token)
+- Default: 10% (`--overlap 51` per chunks di 512 token)
+- Massimo: 20% (`--overlap 102` per chunks di 512 token)
+
+Maggiore sovrapposizione = migliore gestione confini ma più storage.
+
+---
+
+**Versione documentazione**: 2.0 (con chunking semantico)  
 **Ultimo aggiornamento**: Novembre 2025

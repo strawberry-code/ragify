@@ -6,6 +6,7 @@ Provides safe embedding with token validation.
 
 import logging
 import requests
+import time
 from typing import Optional
 from .chunking import count_tokens, validate_chunk_size
 
@@ -17,31 +18,66 @@ EMBEDDING_MODEL = "nomic-embed-text"
 MAX_TOKENS = 8192  # nomic-embed-text limit
 
 
-def get_embedding(text: str, timeout: int = 30) -> Optional[list[float]]:
+def get_embedding(text: str, timeout: int = 60, max_retries: int = 3) -> Optional[list[float]]:
     """
-    Generate embedding using Ollama.
+    Generate embedding using Ollama with retry logic.
     
     Args:
         text: Text to embed
         timeout: Request timeout in seconds
+        max_retries: Maximum retry attempts on failure
         
     Returns:
         Embedding vector or None if failed
     """
-    try:
-        response = requests.post(
-            f"{OLLAMA_URL}/api/embeddings",
-            json={
-                "model": EMBEDDING_MODEL,
-                "prompt": text
-            },
-            timeout=timeout
-        )
-        response.raise_for_status()
-        return response.json()["embedding"]
-    except Exception as e:
-        logger.error(f"Embedding generation failed: {e}")
+    if not text or len(text.strip()) == 0:
+        logger.warning("Empty text provided for embedding")
         return None
+    
+    token_count = count_tokens(text)
+    if token_count > MAX_TOKENS:
+        logger.error(f"Text too long for embedding: {token_count} > {MAX_TOKENS} tokens")
+        return None
+    
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                f"{OLLAMA_URL}/api/embeddings",
+                json={
+                    "model": EMBEDDING_MODEL,
+                    "prompt": text
+                },
+                timeout=timeout
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+            if "embedding" not in result:
+                logger.error(f"No embedding in response: {result}")
+                return None
+                
+            return result["embedding"]
+            
+        except requests.exceptions.Timeout:
+            logger.warning(f"Embedding timeout (attempt {attempt+1}/{max_retries}), retrying...")
+            time.sleep(2 ** attempt)  # Exponential backoff
+            continue
+            
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 500:
+                logger.warning(f"Ollama 500 error (attempt {attempt+1}/{max_retries}), retrying...")
+                time.sleep(2 ** attempt)
+                continue
+            else:
+                logger.error(f"HTTP error from Ollama: {e.response.status_code} - {e.response.text[:200]}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Embedding generation failed: {e}")
+            return None
+    
+    logger.error(f"Failed to generate embedding after {max_retries} attempts")
+    return None
 
 
 def safe_embed_chunk(

@@ -976,7 +976,7 @@ func (m model) completeView() string {
 		"Your RAG platform is ready to use!\n\n"+
 			"Quick start:\n"+
 			"  1. Index documentation:\n"+
-			"     cd /Users/ccavo001/github/strawberry-code/self-hosted-llm-rag\n"+
+			"     cd /Users/username/github/strawberry-code/self-hosted-llm-rag\n"+
 			"     python3 docs_server.py /path/to/docs --port 8000 &\n"+
 			"     python3 local_docs_url_generator.py /path/to/docs -o urls.txt\n"+
 			"     python3 add_urls_to_qdrant.py urls.txt\n\n"+

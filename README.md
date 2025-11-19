@@ -112,9 +112,17 @@ Local Documents
 - **Output**: Text file with one URL per line
 
 ### 6. **add_urls_to_qdrant.py** - Indexing Script
-- **Purpose**: Downloads documents, chunks them, generates embeddings and loads them to Qdrant
-- **Chunking**: Splits texts into ~1000 character pieces
-- **Batch size**: 10 documents at a time
+- **Purpose**: Downloads documents, chunks them using semantic analysis, generates embeddings and loads them to Qdrant
+- **Chunking Strategy**: Two-level semantic chunking
+  - **Level 1 (Chonkie)**: Semantic macro-blocks (~512 tokens) respecting document structure
+  - **Level 2 (semchunk)**: Fine-grained chunks (400-600 tokens) optimized for embeddings
+  - **Token-based**: Uses tiktoken for accurate token counting
+  - **Auto re-chunking**: Oversized chunks automatically split to fit model limits (8192 tokens)
+- **Fallback mechanisms**: If semantic libraries unavailable, gracefully degrades to character-based chunking
+- **CLI Options**:
+  - `--chunk-size`: Target chunk size in tokens (default: 512)
+  - `--overlap`: Overlap between chunks in tokens (default: 51)
+  - `--verbose`: Detailed logging
 - **Metadata**:
   - `_type`: "DocumentChunk" (required by MCP)
   - `text`: Chunk content
@@ -123,6 +131,10 @@ Local Documents
   - `timestamp`: Indexing date
   - `chunk_index`: Chunk index
   - `total_chunks`: Total chunks in document
+  - `semantic_block_index`: Macro-block from Level 1 chunking
+  - `token_count`: Actual token count
+  - `chunking_method`: Method used ('semantic', 'fallback', etc.)
+  - `embedding_model`: Model used for embeddings
 
 ---
 
@@ -141,8 +153,8 @@ Local Documents
    - [Node.js Installation](https://nodejs.org/)
 
 4. **Python 3**
-   - Version 3.8 or higher
-   - Libraries: `requests`, `beautifulsoup4`
+   - Version 3.10 or higher (required for semantic chunking)
+   - Libraries: see `requirements.txt`
 
 5. **Crush CLI** (or other MCP-compatible client)
 
@@ -296,6 +308,9 @@ Add the configuration via the Cline interface or manually edit the MCP configura
 ### Step 5: Install Python Dependencies
 
 ```bash
+# Verify Python version (3.10+ required)
+python3 --version
+
 # Create virtual environment (optional but recommended)
 python3 -m venv venv
 source venv/bin/activate  # Linux/macOS
@@ -305,14 +320,29 @@ source venv/bin/activate  # Linux/macOS
 pip install -r requirements.txt
 ```
 
+**Required packages** (from `requirements.txt`):
+- `requests` - HTTP requests
+- `beautifulsoup4` - HTML parsing
+- `qdrant-client` - Qdrant vector database client
+- `chonkie>=0.1.0` - Semantic macro-chunking
+- `semchunk>=2.0.0` - Fine-grained semantic chunking
+- `tiktoken>=0.5.0` - Token counting for OpenAI models
+
 ### Step 6: Download Support Scripts
 
-Clone or copy these files to your working directory:
+Clone this repository or copy these files to your working directory:
 
+**Core scripts:**
 - `docs_server.py` - HTTP server for documentation
 - `local_docs_url_generator.py` - URL generator from filesystem
-- `add_urls_to_qdrant.py` - Indexing script
+- `add_urls_to_qdrant.py` - Indexing script with semantic chunking
 - `reset_qdrant.py` - Reset Qdrant collection
+
+**Library modules** (`lib/` package):
+- `lib/text_cleaning.py` - Text normalization and quality validation
+- `lib/chunking.py` - Two-level semantic chunking engine
+- `lib/embedding.py` - Embedding generation with auto re-chunking
+- `lib/qdrant_operations.py` - Qdrant database operations
 
 ### Step 7: Verify Installation
 
@@ -407,28 +437,59 @@ http://localhost:8000/guides/installation.md
 #### Step 4: Index Documents
 
 ```bash
-# Load documents to Qdrant
+# Load documents to Qdrant with semantic chunking (recommended)
 python3 add_urls_to_qdrant.py urls.txt
+
+# Advanced usage with custom parameters
+python3 add_urls_to_qdrant.py urls.txt --chunk-size 600 --overlap 60 --verbose
 ```
+
+**CLI Options**:
+- `--chunk-size SIZE`: Target chunk size in tokens (default: 512)
+- `--overlap SIZE`: Overlap between chunks in tokens (default: 51, ~10%)
+- `--verbose`: Show detailed processing information
 
 **Output**:
 ```
-📚 Loading documents from: urls.txt
-Found 125 URLs to process
+📚 Starting document indexing pipeline
+================================================================================
+Input file: urls.txt
+Chunk size: 512 tokens | Overlap: 51 tokens
+================================================================================
 
-[1/125] http://localhost:8000/getting-started.md
-  ✓ Downloaded (2.4 KB)
-  ✓ Extracted 3 chunks
-  ✓ Loaded to Qdrant
+[1/125] Processing: http://localhost:8000/getting-started.md
+  ✓ Downloaded (2,431 chars)
+  ✓ Cleaned (2,387 chars after normalization)
+  ✓ Semantic chunking: 1 macro-block → 3 fine chunks
+  ✓ Token stats: avg=445, min=412, max=487 tokens
+  ✓ Embeddings generated and uploaded
 
-[2/125] http://localhost:8000/api/overview.md
+[2/125] Processing: http://localhost:8000/api/overview.md
 ...
 
-✨ Complete!
-   - URLs processed: 125
-   - Total chunks: 1,847
-   - Total time: 3m 42s
+================================================================================
+📊 Indexing Statistics
+================================================================================
+URLs processed:     125 / 125 (100.0%)
+Total characters:   1,245,890 (raw) → 1,238,122 (cleaned)
+Macro-blocks:       387 semantic blocks
+Final chunks:       1,847 embedding-ready chunks
+Token distribution: avg=478, min=402, max=598 tokens
+Success rate:       98.4% (123 success, 2 failed)
+Total time:         4m 18s
+================================================================================
 ```
+
+**What happens during indexing**:
+1. **Download**: Fetches HTML content from each URL
+2. **Text extraction**: Extracts text using BeautifulSoup
+3. **Cleaning**: Unicode normalization, whitespace cleanup, boilerplate removal
+4. **Quality validation**: Checks minimum length and character diversity
+5. **Semantic chunking (Level 1)**: Chonkie creates macro-blocks respecting document structure
+6. **Fine chunking (Level 2)**: semchunk splits blocks into embedding-optimal sizes
+7. **Token validation**: Ensures all chunks fit within model limits (8192 tokens)
+8. **Embedding generation**: Creates vectors using Ollama nomic-embed-text
+9. **Upload**: Stores vectors + metadata in Qdrant
 
 #### Step 5: Verify Indexing
 
@@ -585,7 +646,29 @@ This error indicates that documents in Qdrant don't have the required metadata.
 
 1. **Verify embedding model**: Make sure Ollama is using `nomic-embed-text`
 2. **Increase result limit**: Try `limit=10` or `limit=20`
-3. **Reduce chunk size**: Modify `CHUNK_SIZE` in `add_urls_to_qdrant.py`
+3. **Adjust chunk size**: Re-index with different `--chunk-size` parameter
+   ```bash
+   python3 add_urls_to_qdrant.py urls.txt --chunk-size 400  # Smaller chunks
+   python3 add_urls_to_qdrant.py urls.txt --chunk-size 600  # Larger chunks
+   ```
+4. **Check chunking method**: Review logs to ensure semantic chunking is working (not falling back to character-based)
+
+#### Semantic chunking not working
+
+If you see "Chonkie not available, using fallback" in logs:
+
+1. **Verify Python version**: Must be 3.10 or higher
+   ```bash
+   python3 --version
+   ```
+2. **Reinstall dependencies**:
+   ```bash
+   pip install --upgrade chonkie semchunk tiktoken
+   ```
+3. **Check import errors**:
+   ```bash
+   python3 -c "import chonkie; import semchunk; import tiktoken; print('All OK')"
+   ```
 
 ---
 
@@ -597,8 +680,17 @@ This error indicates that documents in Qdrant don't have the required metadata.
 |------|---------|-------|
 | `docs_server.py` | HTTP server for local documentation | `python3 docs_server.py /path/to/docs` |
 | `local_docs_url_generator.py` | Generate URL list from filesystem | `python3 local_docs_url_generator.py /path/to/docs -o urls.txt` |
-| `add_urls_to_qdrant.py` | Index documents to Qdrant | `python3 add_urls_to_qdrant.py urls.txt` |
+| `add_urls_to_qdrant.py` | Index documents with semantic chunking | `python3 add_urls_to_qdrant.py urls.txt [--chunk-size SIZE] [--overlap SIZE] [--verbose]` |
 | `reset_qdrant.py` | Reset Qdrant collection | `python3 reset_qdrant.py` |
+
+### Library Modules (`lib/` package)
+
+| File | Purpose | Key Functions |
+|------|---------|---------------|
+| `lib/text_cleaning.py` | Text normalization and quality validation | `clean_text()`, `remove_boilerplate()`, `validate_text_quality()` |
+| `lib/chunking.py` | Two-level semantic chunking | `semantic_chunk_text()`, `fine_chunk_text()`, `count_tokens()`, `validate_chunk_size()` |
+| `lib/embedding.py` | Embedding generation with validation | `get_embedding()`, `safe_embed_chunk()`, `batch_embed_chunks()` |
+| `lib/qdrant_operations.py` | Qdrant database operations | `create_point()`, `upload_points()`, `batch_upload_chunks()` |
 
 ### Test Scripts (optional)
 
@@ -624,7 +716,11 @@ Each indexed document has the following structure in Qdrant:
     "title": "Document title",
     "timestamp": "2025-11-14T12:00:00.000000",
     "chunk_index": 0,
-    "total_chunks": 5
+    "total_chunks": 5,
+    "semantic_block_index": 0,
+    "token_count": 478,
+    "chunking_method": "semantic",
+    "embedding_model": "nomic-embed-text"
   }
 }
 ```
@@ -635,6 +731,12 @@ Each indexed document has the following structure in Qdrant:
 - `url`: Source URL
 - `title`: Title
 - `timestamp`: ISO 8601 timestamp
+
+**Additional fields** (semantic chunking metadata):
+- `semantic_block_index`: Index of the macro-block from Level 1 chunking
+- `token_count`: Actual token count for this chunk
+- `chunking_method`: Chunking strategy used (`"semantic"`, `"fallback"`, etc.)
+- `embedding_model`: Model used for generating embeddings
 
 ---
 
@@ -650,5 +752,78 @@ Each indexed document has the following structure in Qdrant:
 
 For issues or suggestions, open an issue in the project repository.
 
-**Documentation version**: 1.0  
+---
+
+## Advanced Features
+
+### Semantic Chunking Architecture
+
+The platform uses a sophisticated two-level semantic chunking approach:
+
+#### Level 1: Macro-level Chunking (Chonkie)
+- **Purpose**: Divide documents into semantically coherent macro-blocks
+- **Strategy**: Respects document structure (paragraphs, sections, logical breaks)
+- **Target size**: ~512 tokens per block
+- **Benefit**: Preserves high-level semantic context
+
+#### Level 2: Fine-grained Chunking (semchunk)
+- **Purpose**: Split macro-blocks into embedding-optimal chunks
+- **Strategy**: Token-based splitting with semantic boundary awareness
+- **Target size**: 400-600 tokens per chunk
+- **Benefit**: Optimal for vector embeddings while maintaining semantic coherence
+
+#### Token-based vs Character-based
+
+**Why token-based chunking?**
+- Embedding models have token limits (nomic-embed-text: 8192 tokens)
+- Prevents model overflow errors
+- More accurate representation of model input
+- Better semantic consistency across chunks
+
+**Automatic validation and re-chunking:**
+- All chunks validated against model token limits
+- Oversized chunks automatically split at 50% of max size
+- Token counting using `tiktoken` (OpenAI's tokenizer)
+
+#### Fallback Mechanisms
+
+The system gracefully degrades if semantic libraries are unavailable:
+1. **Chonkie unavailable** → Treats entire document as single macro-block
+2. **Semchunk unavailable** → Falls back to character-based sliding window
+3. **Both unavailable** → Simple character-based chunking (~1000 chars)
+
+Logs indicate which method is active for transparency.
+
+### Performance Tuning
+
+#### Chunk Size Optimization
+
+**Smaller chunks (300-400 tokens)**:
+- ✅ More precise results
+- ✅ Better for specific queries
+- ❌ More chunks = larger database
+- ❌ Slower indexing
+
+**Larger chunks (500-600 tokens)**:
+- ✅ More context per result
+- ✅ Fewer chunks = smaller database
+- ✅ Faster indexing
+- ❌ Less precise matching
+
+**Recommended starting point**: 512 tokens (balanced)
+
+#### Overlap Configuration
+
+**Purpose**: Prevents important information from being split across chunk boundaries
+
+**Recommended values**:
+- Minimum: 5% (`--overlap 25` for 512-token chunks)
+- Default: 10% (`--overlap 51` for 512-token chunks)
+- Maximum: 20% (`--overlap 102` for 512-token chunks)
+
+Higher overlap = better boundary handling but more storage.
+
+---
+
+**Documentation version**: 2.0 (with semantic chunking)  
 **Last update**: November 2025

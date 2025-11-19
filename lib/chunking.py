@@ -54,9 +54,13 @@ def semantic_chunk_text(
         return []
     
     try:
-        from chonkie import SemanticChunker
+        from chonkie import TokenChunker
         
-        chunker = SemanticChunker(
+        # Use tiktoken encoding for token-based chunking
+        enc = tiktoken.get_encoding("cl100k_base")
+        
+        chunker = TokenChunker(
+            tokenizer=enc,
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
         )
@@ -104,17 +108,17 @@ def fine_chunk_text(
     try:
         from semchunk import chunkerify
         
+        # Create chunker once with tiktoken encoding
+        chunker = chunkerify("cl100k_base", chunk_size=target_tokens)
+        
         for block_idx, block in enumerate(semantic_blocks):
             if not block or len(block.strip()) == 0:
                 continue
             
             try:
                 # Use semchunk for fine-grained splitting
-                chunks = chunkerify(
-                    block,
-                    chunk_size=target_tokens,
-                    chunk_overlap=overlap_tokens
-                )
+                # overlap parameter is passed to the chunker call, not constructor
+                chunks = chunker(block, overlap=overlap_tokens)
                 
                 for chunk_idx, chunk_text in enumerate(chunks):
                     token_count = count_tokens(chunk_text)
@@ -229,13 +233,18 @@ def filter_chunks(
         
         if token_count > max_tokens:
             logger.warning(f"Chunk too long ({token_count} tokens), re-chunking...")
-            # Re-chunk this specific chunk
-            sub_chunks = fine_chunk_text(
+            # Re-chunk using direct fallback to avoid recursion
+            sub_chunks = _fallback_chunk(
                 [chunk['text']],
                 target_tokens=max_tokens // 2,
                 overlap_tokens=50
             )
-            valid_chunks.extend(sub_chunks)
+            # Only add sub-chunks that are within limits
+            for sub_chunk in sub_chunks:
+                if sub_chunk['token_count'] <= max_tokens:
+                    valid_chunks.append(sub_chunk)
+                else:
+                    logger.error(f"Sub-chunk still too large ({sub_chunk['token_count']} tokens), skipping")
         else:
             valid_chunks.append(chunk)
     
