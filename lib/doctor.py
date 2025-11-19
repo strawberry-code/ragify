@@ -19,6 +19,59 @@ from typing import List, Tuple
 import requests
 
 
+def run_silent_checks() -> Tuple[bool, List[str]]:
+    """
+    Run system checks silently without output.
+
+    Returns:
+        (all_passed, failed_components): Tuple of boolean and list of failed component names
+    """
+    failed = []
+
+    # 1. Check Python version
+    python_version = sys.version_info
+    if python_version < (3, 10):
+        failed.append("Python 3.10+")
+
+    # 2. Check Python dependencies (just essential ones)
+    essential_packages = ['requests', 'chonkie', 'tiktoken', 'qdrant-client', 'tika']
+    try:
+        result = subprocess.run(['pip3', 'list'], capture_output=True, text=True, timeout=10)
+        pip_list = result.stdout.lower()
+
+        for pkg in essential_packages:
+            if pkg.lower() not in pip_list and pkg.replace('-', '_').lower() not in pip_list:
+                failed.append(f"Python package: {pkg}")
+    except:
+        failed.append("Python dependencies")
+
+    # 3. Check Ollama
+    ollama_url = os.getenv('OLLAMA_URL', 'http://localhost:11434')
+    try:
+        response = requests.get(f"{ollama_url}/api/tags", timeout=2)
+        if response.status_code != 200:
+            failed.append("Ollama")
+        else:
+            # Check for nomic-embed-text model
+            models = response.json().get('models', [])
+            model_names = [m.get('name', '') for m in models]
+            if not any('nomic-embed-text' in name for name in model_names):
+                failed.append("nomic-embed-text model")
+    except:
+        failed.append("Ollama")
+
+    # 4. Check Qdrant
+    qdrant_url = os.getenv('QDRANT_URL', 'http://localhost:6333')
+    try:
+        response = requests.get(f"{qdrant_url}/", timeout=2)
+        if response.status_code != 200:
+            failed.append("Qdrant")
+    except:
+        failed.append("Qdrant")
+
+    return (len(failed) == 0, failed)
+
+
 def run_doctor_checks(fix: bool = False) -> None:
     """Run system prerequisite checks for ragify."""
     print("=" * 80)

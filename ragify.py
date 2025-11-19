@@ -550,6 +550,15 @@ Environment variables:
         parser.print_help()
         sys.exit(1)
 
+    # Silent system check for all commands except doctor and init-config
+    if args.command not in ['doctor', 'init-config']:
+        from lib.doctor import run_silent_checks
+        passed, failed_components = run_silent_checks()
+        if not passed:
+            print(f"❌ System check failed: {', '.join(failed_components)}")
+            print(f"   Run 'python3 ragify.py doctor' for details and troubleshooting")
+            sys.exit(1)
+
     if args.command == 'init-config':
         create_default_config(args.path)
         print(f"✅ Created default configuration at: {args.path}")
