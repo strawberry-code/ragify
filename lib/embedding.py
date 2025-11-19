@@ -5,6 +5,7 @@ Provides safe embedding with token validation.
 """
 
 import logging
+import os
 import requests
 import time
 from typing import Optional
@@ -13,7 +14,7 @@ from .chunking import count_tokens, validate_chunk_size
 logger = logging.getLogger(__name__)
 
 # Configuration
-OLLAMA_URL = "http://localhost:11434"
+OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://localhost:11434')
 EMBEDDING_MODEL = "nomic-embed-text"
 MAX_TOKENS = 8192  # nomic-embed-text limit
 
@@ -51,27 +52,38 @@ def get_embedding(text: str, timeout: int = 60, max_retries: int = 3) -> Optiona
             )
             response.raise_for_status()
             result = response.json()
-            
+
             if "embedding" not in result:
                 logger.error(f"No embedding in response: {result}")
                 return None
-                
+
             return result["embedding"]
-            
+
         except requests.exceptions.Timeout:
             logger.warning(f"Embedding timeout (attempt {attempt+1}/{max_retries}), retrying...")
-            time.sleep(2 ** attempt)  # Exponential backoff
+            time.sleep(2 ** attempt)
             continue
-            
+
+        except requests.exceptions.ConnectionError:
+            logger.warning(f"Connection error (attempt {attempt+1}/{max_retries}), retrying...")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+            continue
+
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 500:
+            if e.response.status_code == 429:
+                wait = int(e.response.headers.get('Retry-After', '5'))
+                logger.warning(f"Rate limited, waiting {wait}s (attempt {attempt+1}/{max_retries})")
+                time.sleep(wait)
+                continue
+            elif e.response.status_code == 500:
                 logger.warning(f"Ollama 500 error (attempt {attempt+1}/{max_retries}), retrying...")
                 time.sleep(2 ** attempt)
                 continue
             else:
                 logger.error(f"HTTP error from Ollama: {e.response.status_code} - {e.response.text[:200]}")
                 return None
-                
+
         except Exception as e:
             logger.error(f"Embedding generation failed: {e}")
             return None

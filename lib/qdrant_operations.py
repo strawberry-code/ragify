@@ -5,7 +5,9 @@ Handles batch uploads and point creation.
 """
 
 import logging
+import os
 import requests
+import time
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -13,9 +15,10 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 # Configuration
-QDRANT_URL = "http://localhost:6333"
+QDRANT_URL = os.getenv('QDRANT_URL', 'http://localhost:6333')
 COLLECTION_NAME = "documentation"
-BATCH_SIZE = 10
+BATCH_SIZE = int(os.getenv('QDRANT_BATCH_SIZE', '10'))
+QDRANT_API_KEY = os.getenv('QDRANT_API_KEY')
 
 
 def create_point(
@@ -57,32 +60,60 @@ def create_point(
     }
 
 
-def upload_points(points: list[dict], timeout: int = 60) -> bool:
+def upload_points(points: list[dict], timeout: int = 60, retries: int = 3) -> bool:
     """
-    Upload a batch of points to Qdrant.
-    
+    Upload a batch of points to Qdrant with retry logic.
+
     Args:
         points: List of Qdrant point dictionaries
         timeout: Request timeout in seconds
-        
+        retries: Maximum retry attempts
+
     Returns:
         True if successful, False otherwise
     """
     if not points:
         return True
-    
-    try:
-        response = requests.put(
-            f"{QDRANT_URL}/collections/{COLLECTION_NAME}/points",
-            json={"points": points},
-            timeout=timeout
-        )
-        response.raise_for_status()
-        logger.debug(f"Uploaded {len(points)} points to Qdrant")
-        return True
-    except Exception as e:
-        logger.error(f"Failed to upload batch: {e}")
-        return False
+
+    headers = {}
+    if QDRANT_API_KEY:
+        headers['api-key'] = QDRANT_API_KEY
+
+    url = f"{QDRANT_URL}/collections/{COLLECTION_NAME}/points"
+
+    for attempt in range(retries):
+        try:
+            response = requests.put(
+                url,
+                json={"points": points},
+                headers=headers,
+                timeout=timeout
+            )
+            response.raise_for_status()
+            logger.info(f"Uploaded {len(points)} points to Qdrant")
+            return True
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                wait = int(e.response.headers.get('Retry-After', '5'))
+                logger.warning(f"Rate limited, waiting {wait}s (attempt {attempt+1}/{retries})")
+                time.sleep(wait)
+                continue
+            logger.error(f"HTTP error during upload: {e.response.status_code}")
+            return False
+
+        except requests.exceptions.ConnectionError as e:
+            logger.warning(f"Connection error (attempt {attempt+1}/{retries}): {e}")
+            if attempt < retries - 1:
+                time.sleep(2 ** attempt)
+            continue
+
+        except Exception as e:
+            logger.error(f"Upload failed: {e}")
+            return False
+
+    logger.error(f"Failed to upload batch after {retries} attempts")
+    return False
 
 
 def batch_upload_chunks(
@@ -139,8 +170,13 @@ def check_qdrant_connection() -> bool:
         True if connected, False otherwise
     """
     try:
+        headers = {}
+        if QDRANT_API_KEY:
+            headers['api-key'] = QDRANT_API_KEY
+        
         response = requests.get(
             f"{QDRANT_URL}/collections/{COLLECTION_NAME}",
+            headers=headers,
             timeout=5
         )
         response.raise_for_status()
