@@ -19,6 +19,11 @@ qdrant_storage/
 !requirements.txt
 *.log
 
+# Ragify generated files
+ragify_report.md
+ragify.log
+failed_uploaded_urls.txt
+
 # OS files
 .DS_Store
 Thumbs.db

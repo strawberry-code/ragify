@@ -26,18 +26,20 @@ def create_point(
     url: str,
     title: str,
     chunk_index: int,
-    total_chunks: int
+    total_chunks: int,
+    file_hash: Optional[str] = None
 ) -> dict:
     """
     Create a Qdrant point from a chunk.
-    
+
     Args:
         chunk: Chunk dictionary with 'text', 'embedding', etc.
-        url: Source URL
+        url: Source URL or file path
         title: Document title
         chunk_index: Index of this chunk
         total_chunks: Total number of chunks in document
-        
+        file_hash: Optional file hash for deduplication
+
     Returns:
         Qdrant point dictionary
     """
@@ -56,6 +58,7 @@ def create_point(
             "token_count": chunk.get('token_count', 0),
             "chunking_method": chunk.get('chunking_method', 'unknown'),
             "embedding_model": chunk.get('embedding_model', 'unknown'),
+            "file_hash": file_hash,  # Add file hash for deduplication
         }
     }
 

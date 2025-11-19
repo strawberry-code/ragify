@@ -1,0 +1,52 @@
+# Ragify Configuration File
+
+ragify:
+  version: "1.0"
+
+extraction:
+  tika_jar_path: auto  # auto-download or path to Tika JAR
+  timeout: 60
+  max_file_size: 104857600  # 100MB
+
+chunking:
+  strategies:
+    markdown: semantic
+    code: syntax_aware
+    pdf: page_aware
+    default: semantic
+  chunk_size: 512
+  overlap: 50
+  max_tokens: 8192
+
+embedding:
+  provider: ollama
+  model: nomic-embed-text
+  batch_size: 10
+  # url: http://localhost:11434  # Defaults from env OLLAMA_URL
+
+qdrant:
+  collection: documentation  # Changed to match existing data
+  batch_size: 10
+  # url: http://localhost:6333  # Defaults from env QDRANT_URL
+  # api_key: null  # Defaults from env QDRANT_API_KEY
+
+processing:
+  skip_hidden: true
+  skip_patterns:
+    - "*.pyc"
+    - "*.exe"
+    - "__pycache__"
+    - ".git"
+    - "node_modules"
+    - ".venv"
+    - "venv"
+
+output:
+  report_format: markdown
+  report_path: ./ragify_report.md
+  verbose: false
+
+logging:
+  format: json
+  level: info
+  file: ./ragify.log

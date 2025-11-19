@@ -31,11 +31,12 @@ Follow the [Installation from Scratch](#installation-from-scratch) section below
 ## Table of Contents
 1. [System Overview](#system-overview)
 2. [Components and Architecture](#components-and-architecture)
-3. [System Requirements](#system-requirements)
-4. [Installation from Scratch](#installation-from-scratch)
-5. [Importing Documentation](#importing-documentation)
-6. [Usage and Queries](#usage-and-queries)
-7. [Maintenance](#maintenance)
+3. [Ragify - Modern Document Indexing](#ragify---modern-document-indexing)
+4. [System Requirements](#system-requirements)
+5. [Installation from Scratch](#installation-from-scratch)
+6. [Importing Documentation](#importing-documentation)
+7. [Usage and Queries](#usage-and-queries)
+8. [Maintenance](#maintenance)
 
 ---
 
@@ -53,23 +54,53 @@ The system converts text documents into vector representations (embeddings) and 
 
 ### Data Flow
 
+**Modern Approach (Ragify):**
 ```
 Local Documents
     ↓
-[docs_server.py] → Serves files via HTTP
-    ↓
-[local_docs_url_generator.py] → Generates URL list
-    ↓
-[add_urls_to_qdrant.py] → Downloads, chunks, generates embeddings
+[ragify index] → Direct file access, chunks, generates embeddings
     ↓
 [Ollama - nomic-embed-text] → Generates vectors (768 dimensions)
     ↓
 [Qdrant] → Stores vectors + metadata
     ↓
-[MCP Server ragdocs] → Query interface
-    ↓
-[Crush/Client] → Query the documentation
+[ragify query] → Semantic search
 ```
+
+**Legacy Approach (URL-based):**
+```
+Local Documents → [docs_server.py] → [local_docs_url_generator.py]
+    → [add_urls_to_qdrant.py] → [Qdrant]
+```
+
+---
+
+## Ragify - Modern Document Indexing
+
+**Ragify** is the modern, streamlined approach to indexing documentation. It replaces the three-step HTTP server workflow with direct filesystem access.
+
+### Why Ragify?
+
+- ✅ **No HTTP server needed** - Direct file access
+- ✅ **Universal format support** - PDF, DOCX, code, markdown (1000+ formats via Apache Tika)
+- ✅ **Smart deduplication** - SHA-256 hash-based incremental updates
+- ✅ **Type-specific chunking** - Optimized strategies per file type
+- ✅ **All-in-one tool** - Index, query, list, and reset in one CLI
+
+### Quick Start with Ragify
+
+```bash
+# Index a directory
+python3 ragify.py index ./docs
+
+# Query indexed documents
+python3 ragify.py query "authentication"
+
+# List all indexed files
+python3 ragify.py list
+```
+
+**📖 Full documentation**: [docs/RAGIFY.md](docs/RAGIFY.md) | **⚡ Quick reference**: [docs/QUICK_GUIDE.md](docs/QUICK_GUIDE.md)
 
 ---
 
