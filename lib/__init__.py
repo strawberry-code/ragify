@@ -8,7 +8,8 @@ from .chunking import (
     fine_chunk_text,
     validate_chunk_size,
     filter_chunks,
-    count_tokens
+    count_tokens,
+    ChunkingError,
 )
 from .embedding import get_embedding, safe_embed_chunk, batch_embed_chunks
 from .qdrant_operations import (
@@ -29,6 +30,7 @@ __all__ = [
     'validate_chunk_size',
     'filter_chunks',
     'count_tokens',
+    'ChunkingError',
     # embedding
     'get_embedding',
     'safe_embed_chunk',

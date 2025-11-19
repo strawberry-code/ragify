@@ -30,8 +30,12 @@ from lib import (
     filter_chunks,
     batch_embed_chunks,
     batch_upload_chunks,
-    check_qdrant_connection
+    check_qdrant_connection,
+    ChunkingError,
 )
+
+# tqdm for progress bars
+from tqdm import tqdm
 
 # BeautifulSoup for HTML parsing
 import requests
@@ -99,7 +103,8 @@ def fetch_url_content(url: str) -> tuple[str, str] | tuple[None, None]:
 def process_url(
     url: str,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
-    overlap: int = DEFAULT_OVERLAP
+    overlap: int = DEFAULT_OVERLAP,
+    strict: bool = False
 ) -> dict:
     """
     Process a single URL through the complete pipeline.
@@ -146,14 +151,28 @@ def process_url(
     
     # 3. Semantic chunking (Chonkie)
     logging.info("✂️  Semantic chunking (Chonkie)...")
-    macro_chunks = semantic_chunk_text(cleaned_text, chunk_size=chunk_size * 2, chunk_overlap=overlap)
-    stats['macro_chunks'] = len(macro_chunks)
-    logging.info(f"✓ Created {stats['macro_chunks']} macro-semantic blocks")
+    try:
+        macro_chunks = semantic_chunk_text(cleaned_text, chunk_size=chunk_size * 2, chunk_overlap=overlap)
+        stats['macro_chunks'] = len(macro_chunks)
+        logging.info(f"✓ Created {stats['macro_chunks']} macro-semantic blocks")
+    except ChunkingError as e:
+        if strict:
+            raise
+        logging.warning(f"Chunking failed: {e}, skipping URL")
+        stats['errors'].append(f'Chunking error: {e}')
+        return stats
     
     # 4. Fine chunking (semchunk)
     logging.info("🔬 Fine chunking (semchunk)...")
-    fine_chunks = fine_chunk_text(macro_chunks, target_tokens=chunk_size, overlap_tokens=overlap)
-    logging.info(f"✓ Created {len(fine_chunks)} fine chunks")
+    try:
+        fine_chunks = fine_chunk_text(macro_chunks, target_tokens=chunk_size, overlap_tokens=overlap)
+        logging.info(f"✓ Created {len(fine_chunks)} fine chunks")
+    except ChunkingError as e:
+        if strict:
+            raise
+        logging.warning(f"Fine chunking failed: {e}, skipping URL")
+        stats['errors'].append(f'Fine chunking error: {e}')
+        return stats
     
     # 5. Filter chunks
     logging.info("🔍 Filtering chunks...")
@@ -202,7 +221,8 @@ def process_url(
 def process_urls_file(
     filename: str,
     chunk_size: int = DEFAULT_CHUNK_SIZE,
-    overlap: int = DEFAULT_OVERLAP
+    overlap: int = DEFAULT_OVERLAP,
+    strict: bool = False
 ):
     """
     Process all URLs from a file.
@@ -224,12 +244,8 @@ def process_urls_file(
         total_chunks = 0
         failed_urls = []
         
-        for i, url in enumerate(urls, 1):
-            print(f"\n{'='*80}")
-            logging.info(f"[{i}/{len(urls)}] Processing: {url}")
-            print(f"{'='*80}\n")
-            
-            stats = process_url(url, chunk_size, overlap)
+        for url in tqdm(urls, desc='Processing URLs', unit='url'):
+            stats = process_url(url, chunk_size, overlap, strict=strict)
             all_stats.append(stats)
             
             if stats['success']:
@@ -274,6 +290,19 @@ def process_urls_file(
         sys.exit(1)
 
 
+def check_ollama_connection() -> bool:
+    """Check if Ollama server is reachable by hitting /api/tags endpoint."""
+    try:
+        import os
+        import requests
+        ollama_url = os.getenv('OLLAMA_URL', 'http://localhost:11434')
+        r = requests.get(f"{ollama_url}/api/tags", timeout=5)
+        r.raise_for_status()
+        return True
+    except Exception as e:
+        logging.error(f"Ollama connection failed: {e}")
+        return False
+
 def main():
     parser = argparse.ArgumentParser(
         description='Add URLs to Qdrant with semantic chunking',
@@ -288,9 +317,9 @@ File format (urls.txt):
   https://example.com/doc1
   https://example.com/doc2
   # Comments are ignored
-        """
+"""
     )
-    
+
     parser.add_argument('urls_file', help='File containing URLs (one per line)')
     parser.add_argument(
         '--chunk-size',
@@ -315,27 +344,46 @@ File format (urls.txt):
         action='store_true',
         help='Enable verbose logging'
     )
-    
+    parser.add_argument(
+        '--strict',
+        action='store_true',
+        help='Abort on any fallback or error'
+    )
+
     args = parser.parse_args()
-    
+
+    # Validate arguments
+    if args.chunk_size <= 0:
+        parser.error('--chunk-size must be a positive integer')
+    if args.overlap < 0:
+        parser.error('--overlap must be a non‑negative integer')
+    if args.max_tokens <= 0:
+        parser.error('--max-tokens must be a positive integer')
+
     # Setup logging
     setup_logging(args.verbose)
-    
+
     # Print configuration
     logging.info("🚀 RAG Document Indexer with Semantic Chunking")
     logging.info(f"📁 URLs file: {args.urls_file}")
     logging.info(f"✂️  Chunk size: {args.chunk_size} tokens (overlap: {args.overlap})")
     logging.info(f"🤖 Embedding model: nomic-embed-text via Ollama")
     logging.info(f"🗄️  Collection: documentation")
-    
+
     # Check Qdrant connection
     if not check_qdrant_connection():
         logging.error("❌ Cannot connect to Qdrant")
         sys.exit(1)
     logging.info("✅ Qdrant connected\n")
-    
+
+    # Check Ollama connection
+    if not check_ollama_connection():
+        logging.error("❌ Cannot connect to Ollama")
+        sys.exit(1)
+    logging.info("✅ Ollama connected\n")
+
     # Process URLs
-    process_urls_file(args.urls_file, args.chunk_size, args.overlap)
+    process_urls_file(args.urls_file, args.chunk_size, args.overlap, strict=args.strict)
 
 
 if __name__ == "__main__":
