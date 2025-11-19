@@ -205,9 +205,7 @@ def run_doctor_checks(fix: bool = False) -> None:
 
 
 def _show_system_ready_animation():
-    """Show blinking SYSTEM READY! ASCII art."""
-    import time
-
+    """Show SYSTEM READY! ASCII art."""
     ascii_art = """
     ███████╗██╗   ██╗███████╗████████╗███████╗███╗   ███╗
     ██╔════╝╚██╗ ██╔╝██╔════╝╚══██╔══╝██╔════╝████╗ ████║
@@ -226,19 +224,8 @@ def _show_system_ready_animation():
 
     # ANSI color codes
     GREEN_BRIGHT = '\033[92m'
-    GREEN_NORMAL = '\033[32m'
     RESET = '\033[0m'
     BOLD = '\033[1m'
 
-    # Blink effect
-    for i in range(4):
-        if i % 2 == 0:
-            print(f"{BOLD}{GREEN_BRIGHT}{ascii_art}{RESET}")
-        else:
-            print(f"{GREEN_NORMAL}{ascii_art}{RESET}")
-        time.sleep(0.3)
-        # Clear previous output (move cursor up)
-        print('\033[F' * 14, end='')
-
-    # Final display
+    # Display
     print(f"{BOLD}{GREEN_BRIGHT}{ascii_art}{RESET}")
