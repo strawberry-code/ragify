@@ -5,10 +5,15 @@ Implements two-level chunking strategy for optimal RAG performance.
 """
 
 import logging
-from typing import Optional
+from typing import Optional, TypedDict, List
 import tiktoken
 
 logger = logging.getLogger(__name__)
+
+# Custom exception for chunking failures
+class ChunkingError(RuntimeError):
+    """Raised when semantic chunking cannot be performed."""
+    pass
 
 
 def count_tokens(text: str, encoding_name: str = "cl100k_base") -> int:
@@ -26,10 +31,24 @@ def count_tokens(text: str, encoding_name: str = "cl100k_base") -> int:
         enc = tiktoken.get_encoding(encoding_name)
         return len(enc.encode(text))
     except Exception as e:
-        logger.warning(f"Token counting failed: {e}, using approximation")
-        # Fallback: rough approximation (1 token ≈ 4 characters)
-        return len(text) // 4
+        logger.warning(f"Token counting failed: {e}, using word‑based fallback")
+        # Fallback: approximate 1 token ≈ 1 word
+        return len(text.split())
 
+
+class ChunkTD(TypedDict):
+    text: str
+    embedding: List[float]
+    semantic_block_index: int
+    chunk_index: int
+    token_count: int
+    chunking_method: str
+    embedding_model: str
+
+class QdrantPointTD(TypedDict):
+    id: str
+    vector: List[float]
+    payload: dict
 
 def semantic_chunk_text(
     clean_text: str,
@@ -73,12 +92,12 @@ def semantic_chunk_text(
         logger.info(f"Chonkie created {len(result)} macro-chunks")
         return result
         
-    except ImportError:
-        logger.error("Chonkie not installed, using fallback")
-        return [clean_text]
+    except ImportError as e:
+        logger.error("Chonkie not installed, cannot perform semantic chunking")
+        raise ChunkingError("Chonkie not installed")
     except Exception as e:
-        logger.warning(f"Chonkie failed: {e}, using fallback to single chunk")
-        return [clean_text]
+        logger.warning(f"Chonkie failed: {e}, cannot perform semantic chunking")
+        raise ChunkingError(str(e))
 
 
 def fine_chunk_text(
@@ -145,10 +164,12 @@ def fine_chunk_text(
         logger.info(f"Created {len(final_chunks)} final chunks from {len(semantic_blocks)} semantic blocks")
         return final_chunks
         
-    except ImportError:
-        logger.error("Semchunk not installed, using simple splitting")
-        # Fallback: simple token-based splitting
-        return _fallback_chunk(semantic_blocks, target_tokens, overlap_tokens)
+    except ImportError as e:
+        logger.error("Semchunk not installed, cannot perform fine chunking")
+        raise ChunkingError("Semchunk not installed")
+    except Exception as e:
+        logger.warning(f"Semchunk failed: {e}, cannot perform fine chunking")
+        raise ChunkingError(str(e))
 
 
 def _fallback_chunk(
