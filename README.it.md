@@ -31,11 +31,12 @@ Segui la sezione [Installazione da Zero](#installazione-da-zero) qui sotto.
 ## Indice
 1. [Panoramica del Sistema](#panoramica-del-sistema)
 2. [Componenti e Architettura](#componenti-e-architettura)
-3. [Requisiti di Sistema](#requisiti-di-sistema)
-4. [Installazione da Zero](#installazione-da-zero)
-5. [Importazione Documentazione](#importazione-documentazione)
-6. [Utilizzo e Query](#utilizzo-e-query)
-7. [Manutenzione](#manutenzione)
+3. [Ragify - Indicizzazione Documenti Moderna](#ragify---indicizzazione-documenti-moderna)
+4. [Requisiti di Sistema](#requisiti-di-sistema)
+5. [Installazione da Zero](#installazione-da-zero)
+6. [Importazione Documentazione](#importazione-documentazione)
+7. [Utilizzo e Query](#utilizzo-e-query)
+8. [Manutenzione](#manutenzione)
 
 ---
 
@@ -53,23 +54,53 @@ Il sistema converte documenti testuali in rappresentazioni vettoriali (embedding
 
 ### Flusso dei Dati
 
+**Approccio Moderno (Ragify):**
 ```
 Documenti Locali
     ↓
-[docs_server.py] → Serve file via HTTP
-    ↓
-[local_docs_url_generator.py] → Genera lista URL
-    ↓
-[add_urls_to_qdrant.py] → Scarica, chunka, genera embeddings
+[ragify index] → Accesso diretto ai file, chunking, generazione embeddings
     ↓
 [Ollama - nomic-embed-text] → Genera vettori (768 dimensioni)
     ↓
 [Qdrant] → Archivia vettori + metadata
     ↓
-[MCP Server ragdocs] → Interfaccia di query
-    ↓
-[Crush/Client] → Interroga la documentazione
+[ragify query] → Ricerca semantica
 ```
+
+**Approccio Legacy (basato su URL):**
+```
+Documenti Locali → [docs_server.py] → [local_docs_url_generator.py]
+    → [add_urls_to_qdrant.py] → [Qdrant]
+```
+
+---
+
+## Ragify - Indicizzazione Documenti Moderna
+
+**Ragify** è l'approccio moderno e semplificato per indicizzare documentazione. Sostituisce il workflow a tre passi con server HTTP con accesso diretto al filesystem.
+
+### Perché Ragify?
+
+- ✅ **Nessun server HTTP necessario** - Accesso diretto ai file
+- ✅ **Supporto universale formati** - PDF, DOCX, codice, markdown (oltre 1000 formati via Apache Tika)
+- ✅ **Deduplicazione intelligente** - Aggiornamenti incrementali basati su hash SHA-256
+- ✅ **Chunking specifico per tipo** - Strategie ottimizzate per ogni tipo di file
+- ✅ **Tutto-in-uno** - Indicizza, interroga, elenca e resetta in un unico CLI
+
+### Avvio Rapido con Ragify
+
+```bash
+# Indicizza una directory
+python3 ragify.py index ./docs
+
+# Interroga i documenti indicizzati
+python3 ragify.py query "autenticazione"
+
+# Elenca tutti i file indicizzati
+python3 ragify.py list
+```
+
+**📖 Documentazione completa**: [docs/RAGIFY.md](docs/RAGIFY.md) | **⚡ Guida rapida**: [docs/QUICK_GUIDE.md](docs/QUICK_GUIDE.md)
 
 ---
 
