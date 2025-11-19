@@ -6,6 +6,10 @@ Main orchestrator for processing local documents and indexing them in Qdrant.
 Supports multiple file formats through Apache Tika with intelligent chunking.
 """
 
+import warnings
+# Suppress tika pkg_resources deprecation warning
+warnings.filterwarnings('ignore', message='.*pkg_resources is deprecated.*', category=UserWarning)
+
 import argparse
 import json
 import logging
