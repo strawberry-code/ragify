@@ -536,6 +536,10 @@ Environment variables:
     reset_parser.add_argument('--collection', help='Collection name (default: ragify_docs)')
     reset_parser.add_argument('--confirm', action='store_true', help='Skip confirmation prompt')
 
+    # Doctor command
+    doctor_parser = subparsers.add_parser('doctor', help='Check system prerequisites')
+    doctor_parser.add_argument('--fix', action='store_true', help='Attempt to fix issues (install missing dependencies)')
+
     args = parser.parse_args()
 
     if not args.command:
@@ -545,6 +549,11 @@ Environment variables:
     if args.command == 'init-config':
         create_default_config(args.path)
         print(f"✅ Created default configuration at: {args.path}")
+        sys.exit(0)
+
+    if args.command == 'doctor':
+        from lib.doctor import run_doctor_checks
+        run_doctor_checks(fix=args.fix)
         sys.exit(0)
 
     if args.command == 'query':

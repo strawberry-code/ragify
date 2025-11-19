@@ -4,25 +4,40 @@
 
 ## Quick Start
 
-### Option 1: Interactive Installer (Recommended) 🚀
+### Step 1: Check Prerequisites 🩺
 
-Run the beautiful TUI installer built with [Charm](https://charm.sh):
+Run the doctor command to verify your system is ready:
 
 ```bash
-cd installer
-go build -o rag-installer
-./rag-installer
+python3 ragify.py doctor
 ```
 
-The installer will:
-- ✓ Check system requirements
-- ✓ Install missing components
-- ✓ Configure everything automatically
-- ✓ Guide you through MCP client setup
+This will check:
+- ✓ Python 3.10+ and dependencies
+- ✓ Java (for Apache Tika)
+- ✓ Ollama running with nomic-embed-text model
+- ✓ Qdrant vector database
+- ✓ Disk space
 
-**[See installer documentation](installer/README.md)**
+Use `--fix` flag to auto-install missing Python packages:
 
-### Option 2: Manual Installation
+```bash
+python3 ragify.py doctor --fix
+```
+
+### Step 2: Start Using Ragify
+
+```bash
+# Index your documentation
+python3 ragify.py index ./docs
+
+# Query indexed documents
+python3 ragify.py query "authentication"
+```
+
+**📖 Full documentation**: [docs/RAGIFY.md](docs/RAGIFY.md)
+
+### Manual Installation
 
 Follow the [Installation from Scratch](#installation-from-scratch) section below.
 

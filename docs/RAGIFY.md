@@ -20,9 +20,28 @@ pip install -r requirements.txt
 
 # Create default configuration
 python ragify.py init-config
+
+# Check system prerequisites
+python ragify.py doctor
 ```
 
 ## 🚦 Prerequisites
+
+Use `ragify doctor` to automatically check all prerequisites:
+
+```bash
+python3 ragify.py doctor
+```
+
+This verifies:
+- ✅ Python 3.10+
+- ✅ Python dependencies (requests, chonkie, tika, etc.)
+- ✅ Java 8+ (for Apache Tika)
+- ✅ Ollama running with `nomic-embed-text` model
+- ✅ Qdrant vector database
+- ✅ Disk space (5GB+ recommended)
+
+**Manual setup:**
 
 1. **Ollama** running with `nomic-embed-text` model:
    ```bash

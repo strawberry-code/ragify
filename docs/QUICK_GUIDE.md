@@ -2,6 +2,10 @@
 
 ## Commands
 
+### `ragify.py doctor`
+Check system prerequisites
+- `--fix` - Auto-install missing Python packages
+
 ### `ragify.py init-config`
 Create default configuration file
 - `--path PATH` - Config file path (default: config.yaml)
@@ -40,6 +44,9 @@ export QDRANT_API_KEY=your-key  # optional
 
 ## Quick Start
 ```bash
+# 0. Check prerequisites
+python3 ragify.py doctor
+
 # 1. Create config
 python3 ragify.py init-config
 

@@ -4,25 +4,40 @@
 
 ## Avvio Rapido
 
-### Opzione 1: Installer Interattivo (Consigliato) 🚀
+### Passo 1: Verifica Prerequisiti 🩺
 
-Esegui il bellissimo installer TUI costruito con [Charm](https://charm.sh):
+Esegui il comando doctor per verificare che il sistema sia pronto:
 
 ```bash
-cd installer
-go build -o rag-installer
-./rag-installer
+python3 ragify.py doctor
 ```
 
-L'installer:
-- ✓ Controlla i requisiti di sistema
-- ✓ Installa i componenti mancanti
-- ✓ Configura tutto automaticamente
-- ✓ Ti guida nella configurazione del client MCP
+Questo controllerà:
+- ✓ Python 3.10+ e dipendenze
+- ✓ Java (per Apache Tika)
+- ✓ Ollama in esecuzione con modello nomic-embed-text
+- ✓ Database vettoriale Qdrant
+- ✓ Spazio su disco
 
-**[Vedi documentazione installer](installer/README.md)**
+Usa il flag `--fix` per auto-installare i pacchetti Python mancanti:
 
-### Opzione 2: Installazione Manuale
+```bash
+python3 ragify.py doctor --fix
+```
+
+### Passo 2: Inizia ad Usare Ragify
+
+```bash
+# Indicizza la tua documentazione
+python3 ragify.py index ./docs
+
+# Interroga i documenti indicizzati
+python3 ragify.py query "autenticazione"
+```
+
+**📖 Documentazione completa**: [docs/RAGIFY.md](docs/RAGIFY.md)
+
+### Installazione Manuale
 
 Segui la sezione [Installazione da Zero](#installazione-da-zero) qui sotto.
 
