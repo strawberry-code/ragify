@@ -39,7 +39,3 @@ urls.txt
 all_docs_urls.txt
 html_urls.txt
 markdown_urls.txt
-
-# Go installer
-installer/rag-installer
-installer/rag-installer.exe

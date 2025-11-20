@@ -6,6 +6,8 @@ Main orchestrator for processing local documents and indexing them in Qdrant.
 Supports multiple file formats through Apache Tika with intelligent chunking.
 """
 
+__version__ = '1.0.0'
+
 import warnings
 # Suppress tika pkg_resources deprecation warning
 warnings.filterwarnings('ignore', message='.*pkg_resources is deprecated.*', category=UserWarning)
@@ -529,15 +531,15 @@ Environment variables:
     query_parser = subparsers.add_parser('query', help='Query indexed documents')
     query_parser.add_argument('query', help='Search query text')
     query_parser.add_argument('--limit', type=int, default=5, help='Number of results (default: 5)')
-    query_parser.add_argument('--collection', help='Collection name (default: ragify_docs)')
+    query_parser.add_argument('--collection', help='Collection name (default: documentation)')
 
     # List command
     list_parser = subparsers.add_parser('list', help='List indexed documents')
-    list_parser.add_argument('--collection', help='Collection name (default: ragify_docs)')
+    list_parser.add_argument('--collection', help='Collection name (default: documentation)')
 
     # Reset command
     reset_parser = subparsers.add_parser('reset', help='Reset (delete and recreate) collection')
-    reset_parser.add_argument('--collection', help='Collection name (default: ragify_docs)')
+    reset_parser.add_argument('--collection', help='Collection name (default: documentation)')
     reset_parser.add_argument('--confirm', action='store_true', help='Skip confirmation prompt')
 
     # Doctor command

@@ -93,7 +93,7 @@ embedding:
   batch_size: 10
 
 qdrant:
-  collection: ragify_docs
+  collection: documentation
   batch_size: 10
 
 processing:
@@ -210,7 +210,7 @@ After indexing, you can query documents:
 python ragify.py query "how does authentication work?"
 
 # Or via Qdrant API directly
-curl -X POST 'http://localhost:6333/collections/ragify_docs/points/search' \
+curl -X POST 'http://localhost:6333/collections/documentation/points/search' \
   -H 'Content-Type: application/json' \
   -d '{
     "vector": [...],

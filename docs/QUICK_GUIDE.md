@@ -24,15 +24,15 @@ Index all documents from a directory into Qdrant
 ### `ragify.py query QUERY`
 Search indexed documents
 - `--limit N` - Number of results (default: 5)
-- `--collection NAME` - Collection name (default: ragify_docs)
+- `--collection NAME` - Collection name (default: documentation)
 
 ### `ragify.py list`
 List all indexed documents with statistics
-- `--collection NAME` - Collection name (default: ragify_docs)
+- `--collection NAME` - Collection name (default: documentation)
 
 ### `ragify.py reset`
 Reset (delete and recreate) Qdrant collection
-- `--collection NAME` - Collection name (default: ragify_docs)
+- `--collection NAME` - Collection name (default: documentation)
 - `--confirm` - Skip confirmation prompt
 
 ## Environment Variables

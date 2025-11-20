@@ -61,7 +61,7 @@ class EmbeddingConfig(BaseModel):
 class QdrantConfig(BaseModel):
     """Configuration for Qdrant vector database."""
 
-    collection: str = Field(default="ragify_docs", description="Collection name")
+    collection: str = Field(default="documentation", description="Collection name")
     batch_size: int = Field(default=10, description="Batch upload size")
     url: Optional[str] = Field(default=None, description="Qdrant URL")
     api_key: Optional[str] = Field(default=None, description="API key if required")
@@ -283,7 +283,7 @@ embedding:
   # url: http://localhost:11434  # Defaults from env OLLAMA_URL
 
 qdrant:
-  collection: ragify_docs
+  collection: documentation
   batch_size: 10
   # url: http://localhost:6333  # Defaults from env QDRANT_URL
   # api_key: null  # Defaults from env QDRANT_API_KEY
