@@ -8,6 +8,10 @@ This directory contains detailed documentation for the RAG platform components.
 
 **[⚡ Quick Guide](QUICK_GUIDE.md)** - Quick reference for all ragify commands
 
+## MCP Integration
+
+**[🔌 MCP Setup Guide](MCP_SETUP.md)** - Configure MCP Server ragdocs for Claude Desktop/Crush CLI
+
 ## What is Ragify?
 
 Ragify is an automated pipeline for indexing local documentation into Qdrant for RAG (Retrieval-Augmented Generation). It processes documents directly from your filesystem without needing an HTTP server.
