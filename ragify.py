@@ -546,11 +546,16 @@ Environment variables:
     doctor_parser = subparsers.add_parser('doctor', help='Check system prerequisites')
     doctor_parser.add_argument('--fix', action='store_true', help='Attempt to fix issues (install missing dependencies)')
 
+    # Handle 'help' as alias for '-h' before parsing
+    if len(sys.argv) > 1 and sys.argv[1] == 'help':
+        parser.print_help()
+        sys.exit(0)
+
     args = parser.parse_args()
 
     if not args.command:
         parser.print_help()
-        sys.exit(1)
+        sys.exit(0)
 
     # Silent system check for all commands except doctor and init-config
     if args.command not in ['doctor', 'init-config']:
