@@ -27,7 +27,7 @@ Use `--fix` to auto-install missing Python packages.
 ### 2. Index Your Documentation
 
 ```bash
-python3 ragify.py index ./docs
+python3 ragify.py index ./docs         # → collection "docs"
 ```
 
 Ragify will:
@@ -36,10 +36,19 @@ Ragify will:
 - Generate embeddings with Ollama
 - Store in Qdrant for fast retrieval
 
+**Multiple collections**: The folder name becomes the collection name automatically. This allows you to organize content by topic and avoid bias in search results - querying a physics collection won't return unrelated math results:
+
+```bash
+python3 ragify.py index ./physics      # → collection "physics"
+python3 ragify.py index ./math         # → collection "math"
+python3 ragify.py index ./docs --collection custom  # → explicit name
+```
+
 ### 3. Query Your Docs
 
 ```bash
 python3 ragify.py query "how does authentication work?"
+python3 ragify.py query "integral calculus" --collection math
 ```
 
 **📖 Full documentation**: [docs/RAGIFY.md](docs/RAGIFY.md) | **⚡ Quick reference**: [docs/QUICK_GUIDE.md](docs/QUICK_GUIDE.md)
