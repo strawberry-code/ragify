@@ -101,38 +101,35 @@ python3 ragify.py doctor
 
 ## MCP Integration (Optional)
 
-Query your indexed docs from Claude Desktop or other MCP clients.
+Query your indexed docs from Claude Desktop or Claude Code via MCP.
 
-### Install MCP Server
+### Install
+
+No installation needed - uses [uvx](https://github.com/astral-sh/uv):
 
 ```bash
-npm install -g @qpd-v/mcp-server-ragdocs
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-### Configure Claude Desktop
+### Configure
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+Add to your MCP config:
+- **Claude Code**: `.mcp.json` in project root
+- **Claude Desktop**: `~/Library/Application Support/Claude/claude_desktop_config.json`
 
 ```json
 {
   "mcpServers": {
-    "ragdocs": {
-      "command": "/path/to/node",
-      "args": ["/path/to/mcp-server-ragdocs/build/index.js"],
+    "ragify": {
+      "command": "uvx",
+      "args": ["ragify-mcp"],
       "env": {
         "QDRANT_URL": "http://127.0.0.1:6333",
-        "QDRANT_COLLECTION": "documentation",
         "OLLAMA_URL": "http://localhost:11434"
       }
     }
   }
 }
-```
-
-Find paths:
-```bash
-which node                    # Node path
-npm root -g                   # Global node_modules path
 ```
 
 **📖 Detailed MCP setup**: [docs/MCP_SETUP.md](docs/MCP_SETUP.md)
@@ -144,7 +141,7 @@ npm root -g                   # Global node_modules path
 - **Ragify** - Document indexing CLI (Python)
 - **Qdrant** - Vector database (Docker)
 - **Ollama** - Local embeddings (nomic-embed-text, 768-dim)
-- **MCP Server** - Query interface for MCP clients (optional)
+- **[ragify-mcp](https://pypi.org/project/ragify-mcp/)** - MCP server for Claude Desktop/Code (optional)
 
 ---
 
