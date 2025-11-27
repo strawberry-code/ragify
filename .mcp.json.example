@@ -4,7 +4,8 @@
       "command": "uvx",
       "args": ["ragify-mcp"],
       "env": {
-        "QDRANT_URL": "http://127.0.0.1:6333",
+        "QDRANT_URL": "http://localhost:6333",
+        "QDRANT_API_KEY": "",
         "OLLAMA_URL": "http://localhost:11434"
       }
     }

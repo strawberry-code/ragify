@@ -9,7 +9,15 @@ A complete RAG (Retrieval-Augmented Generation) platform for indexing and search
 
 ## Quick Start
 
-### 1. Check Prerequisites
+### 1. Install Dependencies
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+### 2. Check Prerequisites
 
 ```bash
 python3 ragify.py doctor
@@ -24,7 +32,7 @@ This verifies:
 
 Use `--fix` to auto-install missing Python packages.
 
-### 2. Index Your Documentation
+### 3. Index Your Documentation
 
 ```bash
 python3 ragify.py index ./docs         # → collection "docs"
@@ -44,7 +52,7 @@ python3 ragify.py index ./math         # → collection "math"
 python3 ragify.py index ./docs --collection custom  # → explicit name
 ```
 
-### 3. Query Your Docs
+### 4. Query Your Docs
 
 ```bash
 python3 ragify.py query "how does authentication work?"
@@ -85,10 +93,28 @@ Local Documents
 
 ### Prerequisites
 
-1. **Docker** - For Qdrant vector database
+1. **Docker + Qdrant** - Vector database
+   ```bash
+   # Install Docker: https://docs.docker.com/engine/install/
+   docker run -d --name qdrant --restart unless-stopped \
+     -p 6333:6333 -v qdrant_storage:/qdrant/storage qdrant/qdrant
+   ```
 2. **Ollama** - For embeddings ([ollama.ai](https://ollama.ai/))
+   ```bash
+   curl -fsSL https://ollama.ai/install.sh | sh
+   ollama pull nomic-embed-text
+   # Ollama runs as systemd service, starts automatically on boot
+   sudo systemctl enable ollama && sudo systemctl start ollama
+   ```
 3. **Python 3.10+** - With pip
-4. **Java 8+** - For Apache Tika (optional but recommended)
+4. **Java 21** - For Apache Tika (optional but recommended)
+   ```bash
+   # Install via sdkman (https://sdkman.io)
+   sudo apt install zip unzip -y   # Ubuntu/Debian
+   curl -s "https://get.sdkman.io" | bash
+   source "$HOME/.sdkman/bin/sdkman-init.sh"
+   sdk install java 21-zulu
+   ```
 
 ### Setup
 
@@ -164,10 +190,35 @@ Add to your MCP config:
 
 ## Environment Variables
 
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `QDRANT_URL` | http://localhost:6333 | Qdrant server URL |
+| `QDRANT_API_KEY` | - | API key for Qdrant authentication |
+| `OLLAMA_URL` | http://localhost:11434 | Ollama server URL |
+
 ```bash
-export OLLAMA_URL=http://localhost:11434
-export QDRANT_URL=http://localhost:6333
-export QDRANT_API_KEY=your-key  # Optional, for Qdrant Cloud
+# Example: connect to remote Qdrant with API key
+export QDRANT_URL=http://your-server:6333
+export QDRANT_API_KEY=your-secret-key
+python3 ragify.py index ./docs
+```
+
+---
+
+## Running Long Indexing Jobs (SSH)
+
+Use tmux to keep indexing running after disconnecting from SSH:
+
+```bash
+# Start tmux session
+tmux new -s ragify
+
+# Run indexing
+source .venv/bin/activate
+python3 ragify.py index ./docs
+
+# Detach: Ctrl+B, then D
+# Reconnect later: tmux attach -t ragify
 ```
 
 ---

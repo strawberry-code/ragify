@@ -36,6 +36,12 @@ Add to your MCP config:
 - **Claude Code**: `.mcp.json` in project root
 - **Claude Desktop**: `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS)
 
+> **Note**: `.mcp.json` is gitignored to protect secrets. Copy from template:
+> ```bash
+> cp .mcp.json.example .mcp.json
+> # Edit .mcp.json with your API keys
+> ```
+
 #### Option A: From PyPI (recommended)
 ```json
 {
@@ -130,6 +136,50 @@ npm install -g @qpd-v/mcp-server-ragdocs
   }
 }
 ```
+
+---
+
+## Remote Qdrant with API Key
+
+You can run Qdrant on a remote server and query it from your local MCP client.
+
+### 1. Server Setup (Ubuntu/Remote)
+
+```bash
+# Run Qdrant with API key authentication
+docker run -d --name qdrant --restart unless-stopped \
+  -p 6333:6333 \
+  -e QDRANT__SERVICE__API_KEY=your-secret-api-key \
+  -v qdrant_storage:/qdrant/storage qdrant/qdrant
+```
+
+### 2. Local MCP Configuration
+
+```json
+{
+  "mcpServers": {
+    "ragify": {
+      "command": "uvx",
+      "args": ["ragify-mcp"],
+      "env": {
+        "QDRANT_URL": "http://your-server-ip:6333",
+        "QDRANT_API_KEY": "your-secret-api-key",
+        "OLLAMA_URL": "http://localhost:11434"
+      }
+    }
+  }
+}
+```
+
+### 3. Security Recommendations
+
+- **HTTPS**: Use a reverse proxy (nginx/Caddy) with SSL in front of Qdrant
+- **Firewall**: Restrict port 6333 to known IPs
+- **VPN/Tunnel**: Consider SSH tunnel or VPN for added security
+  ```bash
+  # SSH tunnel example (run locally)
+  ssh -L 6333:localhost:6333 user@your-server
+  ```
 
 ---
 
