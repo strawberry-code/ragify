@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ragify": {
+      "command": "/Users/ccavo001/github/strawberry-code/self-hosted-llm-rag/.venv/bin/python3",
+      "args": ["/Users/ccavo001/github/strawberry-code/self-hosted-llm-rag/mcp_server.py"],
+      "env": {
+        "QDRANT_URL": "http://127.0.0.1:6333",
+        "OLLAMA_URL": "http://localhost:11434"
+      }
+    }
+  }
+}

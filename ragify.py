@@ -352,7 +352,7 @@ class RagifyPipeline:
         success = True
         for i in range(0, len(points), self.config.qdrant.batch_size):
             batch = points[i:i + self.config.qdrant.batch_size]
-            if not upload_points(batch):
+            if not upload_points(batch, collection_name=self.config.qdrant.collection):
                 success = False
                 break
 
@@ -540,6 +540,7 @@ Environment variables:
     # Reset command
     reset_parser = subparsers.add_parser('reset', help='Reset (delete and recreate) collection')
     reset_parser.add_argument('--collection', help='Collection name (default: documentation)')
+    reset_parser.add_argument('--all', action='store_true', dest='reset_all', help='Delete ALL collections (dangerous!)')
     reset_parser.add_argument('--confirm', action='store_true', help='Skip confirmation prompt')
 
     # Doctor command
@@ -711,7 +712,54 @@ Environment variables:
         sys.exit(0)
 
     if args.command == 'reset':
-        # Load config to get collection name
+        if not QDRANT_CLIENT_AVAILABLE:
+            print("❌ qdrant-client not available")
+            sys.exit(1)
+
+        from qdrant_client import QdrantClient
+        from qdrant_client.http import models
+
+        client = QdrantClient(url=os.getenv('QDRANT_URL', 'http://localhost:6333'))
+
+        # Handle --all flag: delete ALL collections
+        if args.reset_all:
+            print("\n" + "="*80)
+            print("⚠️  RESET ALL QDRANT COLLECTIONS")
+            print("="*80)
+
+            try:
+                collections = client.get_collections().collections
+                if not collections:
+                    print("\n⚠️  No collections found")
+                    sys.exit(0)
+
+                print(f"\nThis will DELETE ALL {len(collections)} collections:")
+                for c in collections:
+                    info = client.get_collection(c.name)
+                    print(f"   - {c.name} ({info.points_count} points)")
+                print("\nThis action CANNOT be undone!\n")
+
+                if not args.confirm:
+                    response = input("Type 'DELETE ALL' to confirm: ").strip()
+                    if response != 'DELETE ALL':
+                        print("❌ Reset cancelled")
+                        sys.exit(0)
+
+                for c in collections:
+                    print(f"🗑️  Deleting '{c.name}'...")
+                    client.delete_collection(c.name)
+
+                print("\n" + "="*80)
+                print(f"✅ DELETED {len(collections)} COLLECTIONS")
+                print("="*80 + "\n")
+
+            except Exception as e:
+                print(f"❌ Reset failed: {e}")
+                sys.exit(1)
+
+            sys.exit(0)
+
+        # Handle single collection reset
         config_path = Path('config.yaml')
         if config_path.exists():
             config = RagifyConfig.load(config_path)
@@ -731,16 +779,7 @@ Environment variables:
                 print("❌ Reset cancelled")
                 sys.exit(0)
 
-        if not QDRANT_CLIENT_AVAILABLE:
-            print("❌ qdrant-client not available")
-            sys.exit(1)
-
         try:
-            from qdrant_client import QdrantClient
-            from qdrant_client.http import models
-
-            client = QdrantClient(url=os.getenv('QDRANT_URL', 'http://localhost:6333'))
-
             # Check if collection exists
             collections = client.get_collections().collections
             collection_names = [c.name for c in collections]
@@ -802,6 +841,20 @@ Environment variables:
             if v is not None and k not in ['command', 'directory', 'config', 'no_tika', 'non_interactive']
         }
         config = merge_cli_args(config, cli_args)
+
+        # Auto-derive collection name from folder if not specified
+        if not args.collection:
+            import re
+            folder_name = args.directory.resolve().name
+            # Sanitize: only alphanumeric and underscore, lowercase
+            collection_name = re.sub(r'[^a-zA-Z0-9_]', '_', folder_name).lower()
+            # Remove leading/trailing underscores and collapse multiple underscores
+            collection_name = re.sub(r'_+', '_', collection_name).strip('_')
+            # Ensure not empty
+            if not collection_name:
+                collection_name = 'documentation'
+            config.qdrant.collection = collection_name
+            print(f"📂 Collection auto-derivata dalla cartella: '{collection_name}'")
 
         # Verify connections
         if not check_qdrant_connection():

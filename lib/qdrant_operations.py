@@ -63,12 +63,18 @@ def create_point(
     }
 
 
-def upload_points(points: list[dict], timeout: int = 60, retries: int = 3) -> bool:
+def upload_points(
+    points: list[dict],
+    collection_name: Optional[str] = None,
+    timeout: int = 60,
+    retries: int = 3
+) -> bool:
     """
     Upload a batch of points to Qdrant with retry logic.
 
     Args:
         points: List of Qdrant point dictionaries
+        collection_name: Target collection name (defaults to COLLECTION_NAME)
         timeout: Request timeout in seconds
         retries: Maximum retry attempts
 
@@ -78,11 +84,13 @@ def upload_points(points: list[dict], timeout: int = 60, retries: int = 3) -> bo
     if not points:
         return True
 
+    coll = collection_name or COLLECTION_NAME
+
     headers = {}
     if QDRANT_API_KEY:
         headers['api-key'] = QDRANT_API_KEY
 
-    url = f"{QDRANT_URL}/collections/{COLLECTION_NAME}/points"
+    url = f"{QDRANT_URL}/collections/{coll}/points"
 
     for attempt in range(retries):
         try:
@@ -123,42 +131,44 @@ def batch_upload_chunks(
     chunks: list[dict],
     url: str,
     title: str,
+    collection_name: Optional[str] = None,
     batch_size: int = BATCH_SIZE
 ) -> int:
     """
     Upload chunks to Qdrant in batches.
-    
+
     Args:
         chunks: List of embedded chunk dictionaries
         url: Source URL
         title: Document title
+        collection_name: Target collection name (defaults to COLLECTION_NAME)
         batch_size: Number of points per batch
-        
+
     Returns:
         Number of successfully uploaded chunks
     """
     points = []
     uploaded_count = 0
     total_chunks = len(chunks)
-    
+
     for i, chunk in enumerate(chunks):
         # Create Qdrant point
         point = create_point(chunk, url, title, i, total_chunks)
         points.append(point)
-        
+
         # Upload batch when full
         if len(points) >= batch_size:
-            if upload_points(points):
+            if upload_points(points, collection_name=collection_name):
                 uploaded_count += len(points)
             points = []
-        
+
         # Progress logging
         if (i + 1) % 50 == 0:
             logger.info(f"Upload progress: {i + 1}/{total_chunks}")
-    
+
     # Upload remaining points
     if points:
-        if upload_points(points):
+        if upload_points(points, collection_name=collection_name):
             uploaded_count += len(points)
     
     logger.info(f"Uploaded {uploaded_count}/{total_chunks} chunks for: {title}")
@@ -168,7 +178,7 @@ def batch_upload_chunks(
 def check_qdrant_connection() -> bool:
     """
     Check if Qdrant is accessible.
-    
+
     Returns:
         True if connected, False otherwise
     """
@@ -176,9 +186,10 @@ def check_qdrant_connection() -> bool:
         headers = {}
         if QDRANT_API_KEY:
             headers['api-key'] = QDRANT_API_KEY
-        
+
+        # Check Qdrant is reachable (list collections endpoint)
         response = requests.get(
-            f"{QDRANT_URL}/collections/{COLLECTION_NAME}",
+            f"{QDRANT_URL}/collections",
             headers=headers,
             timeout=5
         )
