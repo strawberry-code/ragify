@@ -60,11 +60,15 @@ def run_silent_checks() -> Tuple[bool, List[str]]:
     except:
         failed.append("Ollama")
 
-    # 4. Check Qdrant
+    # 4. Check Qdrant (with API key if set)
     qdrant_url = os.getenv('QDRANT_URL', 'http://localhost:6333')
+    qdrant_api_key = os.getenv('QDRANT_API_KEY')
+    headers = {'api-key': qdrant_api_key} if qdrant_api_key else {}
     try:
-        response = requests.get(f"{qdrant_url}/", timeout=2)
-        if response.status_code != 200:
+        response = requests.get(f"{qdrant_url}/collections", headers=headers, timeout=2)
+        if response.status_code == 401:
+            failed.append("Qdrant (API key invalid or missing)")
+        elif response.status_code != 200:
             failed.append("Qdrant")
     except:
         failed.append("Qdrant")
@@ -180,23 +184,27 @@ def run_doctor_checks(fix: bool = False) -> None:
         checks.append(('Ollama running', False))
     print()
 
-    # 5. Check Qdrant
+    # 5. Check Qdrant (with API key if set)
     print("🗄️  Checking Qdrant...")
     qdrant_url = os.getenv('QDRANT_URL', 'http://localhost:6333')
+    qdrant_api_key = os.getenv('QDRANT_API_KEY')
+    qdrant_headers = {'api-key': qdrant_api_key} if qdrant_api_key else {}
     try:
-        response = requests.get(f"{qdrant_url}/", timeout=5)
+        response = requests.get(f"{qdrant_url}/collections", headers=qdrant_headers, timeout=5)
         if response.status_code == 200:
             print(f"   ✅ Qdrant running at {qdrant_url}")
+            if qdrant_api_key:
+                print(f"   ✅ API key authentication successful")
             checks.append(('Qdrant running', True))
 
             # Get collections count
-            try:
-                collections_response = requests.get(f"{qdrant_url}/collections", timeout=5)
-                if collections_response.status_code == 200:
-                    collections = collections_response.json().get('result', {}).get('collections', [])
-                    print(f"   ℹ️  Collections: {len(collections)}")
-            except:
-                pass
+            collections = response.json().get('result', {}).get('collections', [])
+            print(f"   ℹ️  Collections: {len(collections)}")
+        elif response.status_code == 401:
+            print(f"   ❌ Qdrant authentication failed (401 Unauthorized)")
+            print(f"   ℹ️  Set QDRANT_API_KEY environment variable")
+            checks.append(('Qdrant running', False))
+            issues.append("Set QDRANT_API_KEY=your-api-key or check if key is correct")
         else:
             print(f"   ❌ Qdrant responded with status {response.status_code}")
             checks.append(('Qdrant running', False))
