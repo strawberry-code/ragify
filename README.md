@@ -175,18 +175,21 @@ Claude is a text generation model - it cannot produce vector embeddings. Semanti
 
 **Architecture A: Single Remote Ollama (recommended)**
 ```
-┌────────────────┐          ┌─────────────────────────────────────────┐
-│  YOUR MACHINE  │          │            REMOTE SERVER                │
-│                │          │                                         │
-│  Claude        │  query   │  ┌─────────────────┐      ┌─────────┐   │
-│    │───────────────────────► │ Ollama + nomic  │ ───► │ Qdrant  │   │
-│    │           │          │  └─────────────────┘      └────┬────┘   │
-│    │◄──────────────────────────────────────────────────────┘        │
-│                │ results  │         ▲                               │
-│                │          │         │ ...indexing                   │
-│                |          |         |                               │
-│                │          │   ragify index                          │
-└────────────────┘          └─────────────────────────────────────────┘
+┌─────────────────────┐          ┌─────────────────────────────────────────┐
+│    YOUR MACHINE     │          │            REMOTE SERVER                │
+│                     │          │                                         │
+│  Claude             │          │                                         │
+│    │                │          │                                         │
+│    ▼                │          │                                         │
+│  ┌────────────┐     │  query   │  ┌─────────────────┐      ┌─────────┐   │
+│  │ MCP Server │ ──────────────►│  │ Ollama + nomic  │ ───► │ Qdrant  │   │
+│  └────────────┘     │          │  └─────────────────┘      └────┬────┘   │
+│    ▲                │ results  │                                │        │
+│    └───────────────────────────────────────────────────────────-┘        │
+│                     │          │         ▲                               │
+│                     │          │         │ indexing                      │
+│                     │          │    ragify index                         │
+└─────────────────────┘          └─────────────────────────────────────────┘
 ```
 
 **Architecture B: Local Ollama for Queries**
@@ -195,13 +198,18 @@ Claude is a text generation model - it cannot produce vector embeddings. Semanti
 │      YOUR MACHINE        │          │       REMOTE SERVER         │
 │                          │          │                             │
 │  Claude                  │          │                             │
-│    │ "search X"          │          │                             │
+│    │                     │          │                             │
 │    ▼                     │          │                             │
+│  ┌────────────┐          │          │                             │
+│  │ MCP Server │          │          │                             │
+│  └─────┬──────┘          │          │                             │
+│        │                 │          │                             │
+│        ▼                 │          │                             │
 │  ┌─────────────────┐     │  vector  │  ┌─────────┐                │
 │  │ Ollama + nomic  │ ───────────────►  │ Qdrant  │                │
 │  └─────────────────┘     │          │  └────┬────┘                │
-│    ▲                     │ results  │       │    ▲                │
-│    └────────────────────────────────────────┘    │                │
+│        ▲                 │ results  │       │    ▲                │
+│        └────────────────────────────────────┘    │                │
 │                          │          │            │                │
 │                          │          │  ┌─────────┴─────┐          │
 │                          │          │  │ Ollama + nomic │          │
