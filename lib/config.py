@@ -58,29 +58,19 @@ class EmbeddingConfig(BaseModel):
         return v
 
 
+def _get_qdrant_url():
+    return os.getenv('QDRANT_URL', 'http://localhost:6333')
+
+def _get_qdrant_api_key():
+    return os.getenv('QDRANT_API_KEY')
+
 class QdrantConfig(BaseModel):
     """Configuration for Qdrant vector database."""
 
     collection: str = Field(default="documentation", description="Collection name")
     batch_size: int = Field(default=10, description="Batch upload size")
-    url: Optional[str] = Field(default=None, description="Qdrant URL")
-    api_key: Optional[str] = Field(default=None, description="API key if required")
-
-    @field_validator('url', mode='before')
-    @classmethod
-    def set_url_from_env(cls, v):
-        """Set URL from environment if not provided."""
-        if v is None or v == '':
-            return os.getenv('QDRANT_URL', 'http://localhost:6333')
-        return v
-
-    @field_validator('api_key', mode='before')
-    @classmethod
-    def set_api_key_from_env(cls, v):
-        """Set API key from environment if not provided."""
-        if v is None or v == '':
-            return os.getenv('QDRANT_API_KEY')
-        return v
+    url: str = Field(default_factory=_get_qdrant_url, description="Qdrant URL")
+    api_key: Optional[str] = Field(default_factory=_get_qdrant_api_key, description="API key if required")
 
 
 class ProcessingConfig(BaseModel):

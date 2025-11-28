@@ -606,7 +606,10 @@ Environment variables:
             from qdrant_client import QdrantClient
             from qdrant_client.http import models
 
-            client = QdrantClient(url=os.getenv('QDRANT_URL', 'http://localhost:6333'))
+            client = QdrantClient(
+                url=config.qdrant.url,
+                api_key=config.qdrant.api_key
+            )
 
             results = client.query_points(
                 collection_name=collection,
@@ -651,7 +654,10 @@ Environment variables:
 
         try:
             from qdrant_client import QdrantClient
-            client = QdrantClient(url=os.getenv('QDRANT_URL', 'http://localhost:6333'))
+            client = QdrantClient(
+                url=config.qdrant.url,
+                api_key=config.qdrant.api_key
+            )
 
             # Get collection info
             collection_info = client.get_collection(collection)
@@ -719,7 +725,17 @@ Environment variables:
         from qdrant_client import QdrantClient
         from qdrant_client.http import models
 
-        client = QdrantClient(url=os.getenv('QDRANT_URL', 'http://localhost:6333'))
+        # Load config for API key
+        config_path = Path('config.yaml')
+        if config_path.exists():
+            reset_config = RagifyConfig.load(config_path)
+        else:
+            reset_config = RagifyConfig.default()
+
+        client = QdrantClient(
+            url=reset_config.qdrant.url,
+            api_key=reset_config.qdrant.api_key
+        )
 
         # Handle --all flag: delete ALL collections
         if args.reset_all:
