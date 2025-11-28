@@ -66,17 +66,19 @@ class QdrantConfig(BaseModel):
     url: Optional[str] = Field(default=None, description="Qdrant URL")
     api_key: Optional[str] = Field(default=None, description="API key if required")
 
-    @field_validator('url')
+    @field_validator('url', mode='before')
+    @classmethod
     def set_url_from_env(cls, v):
         """Set URL from environment if not provided."""
-        if v is None:
+        if v is None or v == '':
             return os.getenv('QDRANT_URL', 'http://localhost:6333')
         return v
 
-    @field_validator('api_key')
+    @field_validator('api_key', mode='before')
+    @classmethod
     def set_api_key_from_env(cls, v):
         """Set API key from environment if not provided."""
-        if v is None:
+        if v is None or v == '':
             return os.getenv('QDRANT_API_KEY')
         return v
 
