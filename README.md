@@ -216,6 +216,48 @@ Both architectures require the same `nomic-embed-text` model to ensure vector co
 
 > **Security:** If exposing Ollama remotely, use firewall rules, VPN, or authenticated reverse proxy.
 
+**Architecture C: Remote MCP via SSH (not recommended)**
+
+This setup runs the entire MCP server on a remote machine, with nothing locally. Claude connects via SSH stdio forwarding.
+
+```
+┌────────────────┐          ┌─────────────────────────────────────────┐
+│  YOUR MACHINE  │          │            REMOTE SERVER                │
+│                │          │                                         │
+│  Claude        │   SSH    │  ┌─────────┐  ┌─────────┐  ┌─────────┐  │
+│    │───────────────────────► │ MCP     │─►│ Ollama  │─►│ Qdrant  │  │
+│    │◄──────────────────────  │ Server  │◄─┤ + nomic │◄─┤         │  │
+│                │  stdio   │  └─────────┘  └─────────┘  └─────────┘  │
+└────────────────┘          └─────────────────────────────────────────┘
+```
+
+⚠️ **Not recommended** because:
+- Adds SSH latency to every MCP request
+- Requires SSH key management and connectivity
+- More complex debugging when issues arise
+- Architectures A or B are simpler and more reliable
+
+If you still want this setup, configure `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "ragify": {
+      "command": "ssh",
+      "args": [
+        "-i", "~/.ssh/your_key.pem",
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "BatchMode=yes",
+        "user@your-server-ip",
+        "PATH=$HOME/.local/bin:$PATH QDRANT_URL=http://localhost:6333 OLLAMA_URL=http://localhost:11434 uvx ragify-mcp"
+      ]
+    }
+  }
+}
+```
+
+> **Note:** `PATH=$HOME/.local/bin:$PATH` is required because non-interactive SSH doesn't load `.bashrc`.
+
 ---
 
 ## Components

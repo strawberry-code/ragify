@@ -216,6 +216,48 @@ Entrambe le architetture richiedono lo stesso modello `nomic-embed-text` per gar
 
 > **Sicurezza:** Se esponi Ollama remotamente, usa regole firewall, VPN, o reverse proxy con autenticazione.
 
+**Architettura C: MCP Remoto via SSH (non consigliata)**
+
+Questa configurazione esegue l'intero server MCP su una macchina remota, senza nulla in locale. Claude si connette via SSH stdio forwarding.
+
+```
+┌────────────────┐          ┌─────────────────────────────────────────┐
+│  TUA MACCHINA  │          │            SERVER REMOTO                │
+│                │          │                                         │
+│  Claude        │   SSH    │  ┌─────────┐  ┌─────────┐  ┌─────────┐  │
+│    │───────────────────────► │ MCP     │─►│ Ollama  │─►│ Qdrant  │  │
+│    │◄──────────────────────  │ Server  │◄─┤ + nomic │◄─┤         │  │
+│                │  stdio   │  └─────────┘  └─────────┘  └─────────┘  │
+└────────────────┘          └─────────────────────────────────────────┘
+```
+
+⚠️ **Non consigliata** perché:
+- Aggiunge latenza SSH a ogni richiesta MCP
+- Richiede gestione chiavi SSH e connettività
+- Debug più complesso in caso di problemi
+- Le architetture A o B sono più semplici e affidabili
+
+Se vuoi comunque questa configurazione, configura `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "ragify": {
+      "command": "ssh",
+      "args": [
+        "-i", "~/.ssh/tua_chiave.pem",
+        "-o", "StrictHostKeyChecking=no",
+        "-o", "BatchMode=yes",
+        "utente@ip-server",
+        "PATH=$HOME/.local/bin:$PATH QDRANT_URL=http://localhost:6333 OLLAMA_URL=http://localhost:11434 uvx ragify-mcp"
+      ]
+    }
+  }
+}
+```
+
+> **Nota:** `PATH=$HOME/.local/bin:$PATH` è necessario perché SSH non interattivo non carica `.bashrc`.
+
 ---
 
 ## Componenti
