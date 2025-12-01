@@ -1,0 +1,14 @@
+# Ragify Authorized Users
+#
+# List of GitHub usernames allowed to access the application.
+# The container will not start if this file is not provided or is empty.
+#
+# Copy this file to users.yaml and add your authorized users.
+
+authorized_users:
+  # Add GitHub usernames here
+  - username: octocat
+  - username: your-github-username
+  # You can also use simple format:
+  # - johndoe
+  # - janedoe

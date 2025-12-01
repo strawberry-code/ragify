@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ragify - RAG Documentation Search</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body x-data="ragifyApp()" x-init="init()">
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-brand">
+            <span class="logo">R</span>
+            <span>Ragify</span>
+        </div>
+        <div class="nav-links">
+            <a href="#" @click.prevent="currentView = 'dashboard'" :class="{ active: currentView === 'dashboard' }">Dashboard</a>
+            <a href="#" @click.prevent="currentView = 'collections'" :class="{ active: currentView === 'collections' }">Collections</a>
+            <a href="#" @click.prevent="currentView = 'upload'" :class="{ active: currentView === 'upload' }">Upload</a>
+            <a href="#" @click.prevent="currentView = 'search'" :class="{ active: currentView === 'search' }">Search</a>
+        </div>
+        <div class="nav-user" x-show="user">
+            <span x-text="user?.username"></span>
+            <a href="/auth/logout" class="btn btn-small">Logout</a>
+        </div>
+        <div class="nav-user" x-show="!user && authEnabled">
+            <a href="/auth/login" class="btn btn-primary btn-small">Login with GitHub</a>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="container">
+        <!-- Dashboard View -->
+        <div x-show="currentView === 'dashboard'" class="view">
+            <h1>Dashboard</h1>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-value" x-text="stats.collections"></div>
+                    <div class="stat-label">Collections</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" x-text="stats.documents"></div>
+                    <div class="stat-label">Documents</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" x-text="stats.chunks"></div>
+                    <div class="stat-label">Chunks</div>
+                </div>
+            </div>
+
+            <div class="status-section">
+                <h2>System Status</h2>
+                <div class="status-grid">
+                    <div class="status-item" :class="status.ollama === 'ok' ? 'status-ok' : 'status-error'">
+                        <span class="status-dot"></span>
+                        <span>Ollama</span>
+                    </div>
+                    <div class="status-item" :class="status.qdrant === 'ok' ? 'status-ok' : 'status-error'">
+                        <span class="status-dot"></span>
+                        <span>Qdrant</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="jobs-section" x-show="jobs.length > 0">
+                <h2>Recent Jobs</h2>
+                <div class="jobs-list">
+                    <template x-for="job in jobs" :key="job.job_id">
+                        <div class="job-item" :class="'job-' + job.status">
+                            <div class="job-info">
+                                <span class="job-filename" x-text="job.filename"></span>
+                                <span class="job-collection" x-text="job.collection"></span>
+                            </div>
+                            <div class="job-status">
+                                <span class="job-badge" x-text="job.status"></span>
+                                <div class="progress-bar" x-show="job.status === 'running'">
+                                    <div class="progress-fill" :style="'width: ' + (job.progress * 100) + '%'"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- Collections View -->
+        <div x-show="currentView === 'collections'" class="view">
+            <div class="view-header">
+                <h1>Collections</h1>
+                <button @click="showCreateCollection = true" class="btn btn-primary">New Collection</button>
+            </div>
+
+            <div class="collections-grid">
+                <template x-for="collection in collections" :key="collection.name">
+                    <div class="collection-card">
+                        <h3 x-text="collection.name"></h3>
+                        <div class="collection-stats">
+                            <span x-text="collection.points_count + ' chunks'"></span>
+                        </div>
+                        <div class="collection-actions">
+                            <button @click="viewCollection(collection.name)" class="btn btn-small">View</button>
+                            <button @click="confirmDeleteCollection(collection.name)" class="btn btn-small btn-danger">Delete</button>
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <!-- Create Collection Modal -->
+            <div class="modal" x-show="showCreateCollection" @click.self="showCreateCollection = false">
+                <div class="modal-content">
+                    <h2>Create Collection</h2>
+                    <form @submit.prevent="createCollection">
+                        <div class="form-group">
+                            <label>Collection Name</label>
+                            <input type="text" x-model="newCollectionName" required pattern="[a-zA-Z0-9_-]+" placeholder="my-collection">
+                        </div>
+                        <div class="form-actions">
+                            <button type="button" @click="showCreateCollection = false" class="btn">Cancel</button>
+                            <button type="submit" class="btn btn-primary">Create</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload View -->
+        <div x-show="currentView === 'upload'" class="view">
+            <h1>Upload Documents</h1>
+
+            <div class="upload-section">
+                <div class="form-group">
+                    <label>Target Collection</label>
+                    <select x-model="uploadCollection">
+                        <template x-for="c in collections" :key="c.name">
+                            <option :value="c.name" x-text="c.name"></option>
+                        </template>
+                    </select>
+                </div>
+
+                <div class="dropzone"
+                     @dragover.prevent="dragOver = true"
+                     @dragleave.prevent="dragOver = false"
+                     @drop.prevent="handleDrop($event)"
+                     :class="{ 'dragover': dragOver }">
+                    <div class="dropzone-content">
+                        <p>Drag & drop files here</p>
+                        <p>or</p>
+                        <label class="btn btn-primary">
+                            Browse Files
+                            <input type="file" @change="handleFileSelect($event)" multiple hidden>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="upload-queue" x-show="uploadQueue.length > 0">
+                    <h3>Upload Queue</h3>
+                    <template x-for="(file, index) in uploadQueue" :key="index">
+                        <div class="queue-item">
+                            <span x-text="file.name"></span>
+                            <button @click="uploadQueue.splice(index, 1)" class="btn btn-small">Remove</button>
+                        </div>
+                    </template>
+                    <button @click="startUpload" class="btn btn-primary" :disabled="uploading">
+                        <span x-show="!uploading">Upload All</span>
+                        <span x-show="uploading">Uploading...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Search View -->
+        <div x-show="currentView === 'search'" class="view">
+            <h1>Search Documents</h1>
+
+            <div class="search-section">
+                <form @submit.prevent="performSearch" class="search-form">
+                    <div class="form-group">
+                        <label>Collection</label>
+                        <select x-model="searchCollection">
+                            <template x-for="c in collections" :key="c.name">
+                                <option :value="c.name" x-text="c.name"></option>
+                            </template>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Query</label>
+                        <input type="text" x-model="searchQuery" placeholder="Enter your search query..." required>
+                    </div>
+                    <button type="submit" class="btn btn-primary" :disabled="searching">
+                        <span x-show="!searching">Search</span>
+                        <span x-show="searching">Searching...</span>
+                    </button>
+                </form>
+
+                <div class="search-results" x-show="searchResults.length > 0">
+                    <h3>Results</h3>
+                    <template x-for="(result, index) in searchResults" :key="index">
+                        <div class="result-card">
+                            <div class="result-header">
+                                <span class="result-score" x-text="'Score: ' + result.score.toFixed(3)"></span>
+                                <span class="result-file" x-text="result.url"></span>
+                            </div>
+                            <div class="result-title" x-text="result.title || 'Untitled'"></div>
+                            <div class="result-text" x-text="result.text"></div>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Toast Notifications -->
+    <div class="toast-container">
+        <template x-for="toast in toasts" :key="toast.id">
+            <div class="toast" :class="'toast-' + toast.type" x-show="toast.visible"
+                 x-transition:enter="toast-enter"
+                 x-transition:leave="toast-leave">
+                <span x-text="toast.message"></span>
+            </div>
+        </template>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

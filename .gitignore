@@ -40,3 +40,9 @@ all_docs_urls.txt
 html_urls.txt
 markdown_urls.txt
 .mcp.json
+
+# Docker/Container
+.env
+users.yaml
+!docker/users.yaml.example
+!.env.example

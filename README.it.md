@@ -2,12 +2,50 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Container](https://img.shields.io/badge/Container-GHCR-blue.svg)](https://github.com/strawberry-code/self-hosted-llm-rag/pkgs/container/self-hosted-llm-rag)
 
 > 🇬🇧 **English Version**: [README.md](README.md)
 
 Una piattaforma RAG (Retrieval-Augmented Generation) completa per indicizzare e cercare documentazione locale usando ricerca semantica con vector embeddings.
 
-## Quick Start
+## Docker Quick Start (Consigliato)
+
+Il modo più semplice per eseguire Ragify è con Docker/Podman. Tutto incluso: Ollama, Qdrant, API e Web UI.
+
+```bash
+# Esegui senza autenticazione (più semplice)
+docker run -d --name ragify -p 8080:8080 \
+  -v ragify_data:/data \
+  ghcr.io/strawberry-code/self-hosted-llm-rag:latest
+
+# Accesso: http://localhost:8080
+```
+
+**Con autenticazione GitHub OAuth:**
+```bash
+# 1. Crea users.yaml con gli username GitHub autorizzati
+cat > users.yaml << 'EOF'
+authorized_users:
+  - username: tuo-username-github
+EOF
+
+# 2. Esegui con OAuth (richiede GitHub OAuth App)
+docker run -d --name ragify -p 8080:8080 \
+  -v ragify_data:/data \
+  -v ./users.yaml:/config/users.yaml:ro \
+  -e AUTH_CONFIG=/config/users.yaml \
+  -e GITHUB_CLIENT_ID=tuo_client_id \
+  -e GITHUB_CLIENT_SECRET=tuo_client_secret \
+  ghcr.io/strawberry-code/self-hosted-llm-rag:latest
+```
+
+**Varianti immagine:**
+- `ghcr.io/strawberry-code/self-hosted-llm-rag:latest` - Standard (~5GB)
+- `ghcr.io/strawberry-code/self-hosted-llm-rag:latest-tika` - Con Java/Tika per PDF/Office
+
+---
+
+## CLI Quick Start
 
 ### 1. Installa Dipendenze
 
