@@ -34,12 +34,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tini \
     curl \
     ca-certificates \
-    openjdk-17-jre-headless \
+    openjdk-21-jre-headless \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Java environment (create symlink to avoid architecture-specific path)
-RUN ln -s /usr/lib/jvm/java-17-openjdk-* /usr/lib/jvm/java-17
-ENV JAVA_HOME=/usr/lib/jvm/java-17
+RUN ln -s /usr/lib/jvm/java-21-openjdk-* /usr/lib/jvm/java-21
+ENV JAVA_HOME=/usr/lib/jvm/java-21
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
 
 # Install Ollama
