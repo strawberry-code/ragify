@@ -81,6 +81,9 @@ RUN ollama serve & \
     ollama pull nomic-embed-text && \
     pkill ollama || true
 
+# Pre-download Tika JAR (triggers auto-download to /tmp/tika-server.jar)
+RUN python -c "from tika import parser; parser.from_buffer('test', xmlContent=False)" || true
+
 # Create data directory for Qdrant
 RUN mkdir -p /data/qdrant
 
