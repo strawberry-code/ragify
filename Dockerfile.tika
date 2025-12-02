@@ -41,6 +41,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN ln -s /usr/lib/jvm/java-21-openjdk-* /usr/lib/jvm/java-21
 ENV JAVA_HOME=/usr/lib/jvm/java-21
 ENV PATH="${JAVA_HOME}/bin:${PATH}"
+# Tika JAR path (set after pre-download, used by lib/tika_check.py)
+ENV TIKA_JAR_PATH=/tmp/tika-server.jar
 
 # Install Ollama
 RUN curl -fsSL https://ollama.ai/install.sh | sh
@@ -81,8 +83,23 @@ RUN ollama serve & \
     ollama pull nomic-embed-text && \
     pkill ollama || true
 
-# Pre-download Tika JAR (triggers auto-download to /tmp/tika-server.jar)
-RUN python -c "from tika import parser; parser.from_buffer('test', xmlContent=False)" || true
+# Pre-download Tika JAR and ensure it's in the expected location
+RUN python3 -c "\
+import os, shutil; \
+from tika import parser, tika; \
+# Trigger download \
+parser.from_buffer(b'test', xmlContent=False); \
+# Get the actual JAR path \
+jar_path = getattr(tika, 'TikaJarPath', None); \
+print(f'Tika JAR downloaded to: {jar_path}'); \
+# Copy to expected location if different \
+if jar_path and os.path.exists(jar_path) and jar_path != '/tmp/tika-server.jar': \
+    shutil.copy2(jar_path, '/tmp/tika-server.jar'); \
+    print('Copied to /tmp/tika-server.jar'); \
+# Verify \
+assert os.path.exists('/tmp/tika-server.jar'), 'Tika JAR not found at /tmp/tika-server.jar'; \
+print('Tika JAR verified at /tmp/tika-server.jar'); \
+" || echo "WARNING: Tika JAR pre-download failed, will download at runtime"
 
 # Create data directory for Qdrant
 RUN mkdir -p /data/qdrant

@@ -12,6 +12,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 - Ollama context size reduced from 8192 to 2048 to match nomic-embed-text model limit
 - Centralized logging configuration for consistent pipeline logs visibility
 - UI now shows actual error messages instead of generic failure messages
+- Tika JAR detection now supports versioned filenames and TIKA_JAR_PATH env var
+- Improved Tika pre-download in Dockerfile.tika with verification and copy to expected path
 
 ## [1.1.2] - 2025-12-02
 

@@ -49,23 +49,41 @@ def check_tika_jar_available() -> Tuple[bool, Optional[Path]]:
     Returns:
         Tuple of (is_available, jar_path)
     """
-    # Tika downloads to /tmp on Unix systems
-    possible_paths = [
+    # Check environment variable first (for Docker containers)
+    env_path = os.getenv('TIKA_JAR_PATH')
+    if env_path:
+        jar_path = Path(env_path)
+        if jar_path.exists():
+            logger.debug(f"Tika JAR found via TIKA_JAR_PATH: {jar_path}")
+            return True, jar_path
+
+    # Static paths to check
+    static_paths = [
         Path('/tmp/tika-server.jar'),
-        Path('/var/folders').rglob('tika-server.jar'),  # macOS temp
         Path.home() / '.tika' / 'tika-server.jar',
     ]
 
-    for path in possible_paths:
-        if isinstance(path, Path) and path.exists():
+    for path in static_paths:
+        if path.exists():
+            logger.debug(f"Tika JAR found at: {path}")
             return True, path
-        # For glob results
-        try:
-            for found_path in path:
-                if found_path.exists():
-                    return True, found_path
-        except (TypeError, AttributeError):
-            continue
+
+    # Glob patterns for versioned JARs (tika-server-X.Y.Z.jar)
+    glob_patterns = [
+        (Path('/tmp'), 'tika-server*.jar'),
+        (Path.home() / '.tika', 'tika-server*.jar'),
+        (Path('/var/folders'), '**/tika-server*.jar'),  # macOS temp
+    ]
+
+    for base_path, pattern in glob_patterns:
+        if base_path.exists():
+            try:
+                for found_path in base_path.glob(pattern):
+                    if found_path.exists() and found_path.is_file():
+                        logger.debug(f"Tika JAR found via glob: {found_path}")
+                        return True, found_path
+            except (PermissionError, OSError):
+                continue
 
     return False, None
 
@@ -239,13 +257,34 @@ def ensure_tika_ready(interactive: bool = True, auto_skip: bool = False) -> bool
 
 def is_tika_available() -> bool:
     """
-    Simple check if Tika is available for use.
+    Check if Tika is available for use.
+
+    First checks via check_tika_available(), then falls back to trying
+    tika-python directly in case the JAR is in an unexpected location.
 
     Returns:
-        True if Java and Tika JAR are available, False otherwise.
+        True if Tika can be used, False otherwise.
     """
+    # First try standard check
     status = check_tika_available()
-    return status['can_use_tika']
+    if status['can_use_tika']:
+        return True
+
+    # Fallback: try tika-python directly (it knows its own JAR location)
+    if status['java_installed']:
+        try:
+            from tika import tika
+            # Check if tika-python has a valid JAR path
+            jar_path = getattr(tika, 'TikaJarPath', None)
+            if jar_path and Path(jar_path).exists():
+                logger.info(f"Tika JAR found via tika-python: {jar_path}")
+                return True
+        except ImportError:
+            pass
+        except Exception as e:
+            logger.debug(f"Tika-python fallback check failed: {e}")
+
+    return False
 
 
 def print_tika_status():

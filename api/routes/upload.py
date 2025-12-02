@@ -115,15 +115,19 @@ def run_indexing(job_id: str, collection_dir: Path, collection: str, filenames: 
         # Import RagifyPipeline
         from ragify import RagifyPipeline
         from lib.config import RagifyConfig
-        from lib.tika_check import is_tika_available
+        from lib.tika_check import is_tika_available, check_tika_available
 
         # Configure
         config = RagifyConfig.default()
         config.qdrant.collection = collection
 
-        # Check Tika availability
-        use_tika = is_tika_available()
-        logger.info(f"[{job_id}] Tika available: {use_tika}")
+        # Check Tika availability with diagnostic info
+        tika_status = check_tika_available()
+        use_tika = tika_status['can_use_tika']
+        logger.info(f"[{job_id}] Tika status: java={tika_status['java_installed']}, "
+                    f"jar={tika_status['tika_jar_available']}, path={tika_status.get('tika_jar_path')}")
+        if tika_status['issues']:
+            logger.warning(f"[{job_id}] Tika issues: {tika_status['issues']}")
 
         jobs[job_id]["progress"] = 0.2
         jobs[job_id]["message"] = f"Processing with {'Tika' if use_tika else 'text-only'} mode"
