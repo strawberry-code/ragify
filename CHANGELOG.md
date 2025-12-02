@@ -7,6 +7,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+- File cleanup now guaranteed via finally block: uploaded files are deleted after Qdrant upload or on pipeline failure
+
 ## [1.2.0] - 2025-12-02
 
 ### Added

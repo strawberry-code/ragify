@@ -170,6 +170,20 @@ def run_indexing(job_id: str, collection_dir: Path, collection: str, filenames: 
         jobs[job_id]["message"] = error_msg
         jobs[job_id]["completed_at"] = datetime.utcnow().isoformat()
 
+    finally:
+        # Cleanup: delete uploaded files after processing (success or failure)
+        cleanup_count = 0
+        for filename in filenames:
+            file_path = collection_dir / filename
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+                    cleanup_count += 1
+            except Exception as cleanup_err:
+                logger.warning(f"[{job_id}] Failed to cleanup {file_path}: {cleanup_err}")
+
+        logger.info(f"[{job_id}] Cleanup: removed {cleanup_count}/{len(filenames)} uploaded files")
+
 
 @router.post("/upload")
 async def upload_file(
@@ -326,6 +340,8 @@ def run_zip_indexing(job_id: str, zip_path: Path, collection_dir: Path, collecti
     """
     logger.info(f"[{job_id}] Starting ZIP extraction from {zip_path}")
 
+    extracted_files = []  # Track files for cleanup in finally block
+
     try:
         jobs[job_id]["status"] = "running"
         jobs[job_id]["stage"] = "extracting_zip"
@@ -333,7 +349,6 @@ def run_zip_indexing(job_id: str, zip_path: Path, collection_dir: Path, collecti
         jobs[job_id]["progress"] = 0.05
 
         # Extract ZIP, filtering out macOS metadata and hidden files
-        extracted_files = []
         with zipfile.ZipFile(zip_path, 'r') as zf:
             for name in zf.namelist():
                 # Skip macOS metadata, hidden files, and directories
@@ -403,17 +418,41 @@ def run_zip_indexing(job_id: str, zip_path: Path, collection_dir: Path, collecti
         logger.error(f"[{job_id}] ZIP indexing FAILED: {error_msg}")
         logger.error(f"[{job_id}] Stack trace:\n{traceback.format_exc()}")
 
-        # Cleanup ZIP if still exists
-        if zip_path.exists():
-            try:
-                zip_path.unlink()
-            except Exception:
-                pass
-
         jobs[job_id]["status"] = "failed"
         jobs[job_id]["stage"] = "failed"
         jobs[job_id]["message"] = error_msg
         jobs[job_id]["completed_at"] = datetime.utcnow().isoformat()
+
+    finally:
+        # Cleanup: delete ZIP if still exists
+        if zip_path.exists():
+            try:
+                zip_path.unlink()
+                logger.debug(f"[{job_id}] Cleanup: removed ZIP file")
+            except Exception as cleanup_err:
+                logger.warning(f"[{job_id}] Failed to cleanup ZIP {zip_path}: {cleanup_err}")
+
+        # Cleanup: delete extracted files after processing (success or failure)
+        cleanup_count = 0
+        for filename in extracted_files:
+            file_path = collection_dir / filename
+            try:
+                if file_path.exists():
+                    file_path.unlink()
+                    cleanup_count += 1
+                    # Also try to remove parent dirs if empty (for nested paths)
+                    parent = file_path.parent
+                    while parent != collection_dir:
+                        try:
+                            parent.rmdir()  # Only removes if empty
+                            parent = parent.parent
+                        except OSError:
+                            break
+            except Exception as cleanup_err:
+                logger.warning(f"[{job_id}] Failed to cleanup {file_path}: {cleanup_err}")
+
+        if extracted_files:
+            logger.info(f"[{job_id}] Cleanup: removed {cleanup_count}/{len(extracted_files)} extracted files")
 
 
 @router.post("/upload-zip")
