@@ -109,11 +109,11 @@ function ragifyApp() {
                     this.newCollectionName = '';
                     await this.loadCollections();
                 } else {
-                    const data = await res.json();
+                    const data = await res.json().catch(() => ({}));
                     this.showToast(data.detail || 'Failed to create collection', 'error');
                 }
             } catch (e) {
-                this.showToast('Failed to create collection', 'error');
+                this.showToast(`Failed to create collection: ${e.message || 'Network error'}`, 'error');
             }
         },
 
@@ -126,10 +126,11 @@ function ragifyApp() {
                     this.showToast('Collection deleted', 'success');
                     await this.loadCollections();
                 } else {
-                    this.showToast('Failed to delete collection', 'error');
+                    const data = await res.json().catch(() => ({}));
+                    this.showToast(data.detail || 'Failed to delete collection', 'error');
                 }
             } catch (e) {
-                this.showToast('Failed to delete collection', 'error');
+                this.showToast(`Failed to delete collection: ${e.message || 'Network error'}`, 'error');
             }
         },
 
@@ -195,12 +196,14 @@ function ragifyApp() {
                     });
 
                     if (res.ok) {
-                        this.showToast(`Uploaded: ${file.name}`, 'success');
+                        const data = await res.json();
+                        this.showToast(`Uploaded: ${file.name} (Job: ${data.job_id?.slice(0,8) || 'queued'})`, 'success');
                     } else {
-                        this.showToast(`Failed: ${file.name}`, 'error');
+                        const error = await res.json().catch(() => ({}));
+                        this.showToast(`Failed: ${file.name} - ${error.detail || res.statusText}`, 'error');
                     }
                 } catch (e) {
-                    this.showToast(`Failed: ${file.name}`, 'error');
+                    this.showToast(`Failed: ${file.name} - ${e.message || 'Network error'}`, 'error');
                 }
             }
 
@@ -235,11 +238,11 @@ function ragifyApp() {
                         this.showToast('No results found', 'info');
                     }
                 } else {
-                    const data = await res.json();
+                    const data = await res.json().catch(() => ({}));
                     this.showToast(data.detail || 'Search failed', 'error');
                 }
             } catch (e) {
-                this.showToast('Search failed', 'error');
+                this.showToast(`Search failed: ${e.message || 'Network error'}`, 'error');
             }
 
             this.searching = false;
