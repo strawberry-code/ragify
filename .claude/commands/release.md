@@ -1,6 +1,6 @@
 # Release Completa
 
-Esegue in sequenza: commit release, build, push GHCR.
+Esegue in sequenza: commit release, build, push GHCR, crea GitHub Release.
 
 ## Sintassi
 
@@ -33,7 +33,7 @@ Verifica:
 
 ```bash
 # Da CHANGELOG.md, trova primo ## [x.y.z]
-grep -m1 '## \[' CHANGELOG.md
+grep -E '## \[[0-9]+\.[0-9]+\.[0-9]+\]' CHANGELOG.md | head -1
 ```
 
 Calcola nuova versione in base all'argomento.
@@ -53,6 +53,7 @@ Azioni:
 4. Push: origin/main + tag
 5. Build: ragify:1.1.0-tika
 6. Push GHCR: ghcr.io/strawberry-code/ragify:1.1.0-tika
+7. GitHub Release: v1.1.0 con note da CHANGELOG
 
 Procedere? [y/N]
 ```
@@ -94,6 +95,32 @@ podman push ghcr.io/strawberry-code/ragify:{version}-tika
 podman push ghcr.io/strawberry-code/ragify:latest-tika
 ```
 
+Se errore TLS, usa `--tls-verify=false`.
+
+**4.7 Crea GitHub Release**
+
+Estrai le note dalla sezione appena rilasciata in CHANGELOG.md e crea la release:
+
+```bash
+gh release create v{version} --title "v{version}" --notes "$(cat <<'EOF'
+## What's Changed
+
+### Added
+- [contenuto da CHANGELOG ### Added]
+
+### Changed
+- [contenuto da CHANGELOG ### Changed]
+
+### Fixed
+- [contenuto da CHANGELOG ### Fixed]
+
+### Docker Images
+- `ghcr.io/strawberry-code/ragify:{version}-tika`
+- `ghcr.io/strawberry-code/ragify:latest-tika`
+EOF
+)"
+```
+
 ### Step 5: Riepilogo finale
 
 ```
@@ -108,6 +135,9 @@ Docker:
   ghcr.io/strawberry-code/ragify:1.1.0-tika
   ghcr.io/strawberry-code/ragify:latest-tika
 
+GitHub Release:
+  https://github.com/strawberry-code/self-hosted-llm-rag/releases/tag/v1.1.0
+
 Deploy:
   docker pull ghcr.io/strawberry-code/ragify:latest-tika
   docker compose down && docker compose up -d
@@ -117,7 +147,8 @@ Deploy:
 
 ## Note
 
-- Richiede conferma prima di ogni step critico
+- Richiede conferma prima di procedere
 - Se un passaggio fallisce, si ferma e chiede come procedere
 - Il processo completo richiede ~10-15 minuti
 - Builda solo variante `-tika` (la più usata)
+- Le note della GitHub Release vengono estratte dal CHANGELOG.md
