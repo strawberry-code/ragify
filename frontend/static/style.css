@@ -790,5 +790,12 @@ body {
         order: 3;
         width: 100%;
         justify-content: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .status-badge {
+        font-size: 0.65rem;
+        padding: 0.4rem 0.75rem;
     }
 }

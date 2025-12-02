@@ -13,6 +13,7 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 ### Fixed
 - Silenced verbose httpx/httpcore logs that spammed 60+ lines per file upload
 - Silenced Tika startup warnings ("Failed to see startup log message; retrying...")
+- Status indicators (Ollama/Qdrant/Authenticated) now wrap responsively on mobile view
 
 ## [1.1.4] - 2025-12-02
 
