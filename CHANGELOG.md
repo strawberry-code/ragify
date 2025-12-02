@@ -1,9 +1,20 @@
 # Changelog
 
-Tutte le modifiche rilevanti al progetto sono documentate in questo file.
+All notable changes to this project are documented in this file.
 
-Il formato segue [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-e il progetto aderisce al [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+### Added
+- Pre-download Tika JAR in Dockerfile.tika for PDF support on first boot
+- Claude Code slash commands: `/commit`, `/build`, `/push-ghcr`, `/release`
+
+### Changed
+- Complete README.md rewrite focused on Docker container users
+- New CONTRIBUTING.md with technical documentation for developers
+- MCP endpoint supports both GET (SSE) and POST (Streamable HTTP)
 
 ## [1.0.0] - 2025-12-02
 

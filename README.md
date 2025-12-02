@@ -1,363 +1,229 @@
-# RAG Platform - Self-Hosted Documentation Search
+# Ragify - Self-Hosted RAG Container
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Container](https://img.shields.io/badge/Container-GHCR-blue.svg)](https://github.com/strawberry-code/self-hosted-llm-rag/pkgs/container/self-hosted-llm-rag)
+[![Container](https://img.shields.io/badge/Container-GHCR-blue.svg)](https://ghcr.io/strawberry-code/ragify)
 
-> 🇮🇹 **Versione Italiana**: [README.it.md](README.it.md)
+All-in-one container for semantic document search. Index your docs, search with AI embeddings.
 
-A complete RAG (Retrieval-Augmented Generation) platform for indexing and searching local documentation using semantic search with vector embeddings.
+**Includes:** Ollama + nomic-embed-text, Qdrant vector DB, REST API, Web UI, MCP server.
 
-## Docker Quick Start (Recommended)
-
-The easiest way to run Ragify is with Docker/Podman. Everything is included: Ollama, Qdrant, API, and Web UI.
+## Quick Start
 
 ```bash
-# Run without authentication (simplest)
-docker run -d --name ragify -p 8080:8080 \
-  -v ragify_data:/data \
-  ghcr.io/strawberry-code/self-hosted-llm-rag:latest
-
-# Access: http://localhost:8080
+docker pull ghcr.io/strawberry-code/ragify:latest-tika
+docker run -d --name ragify -p 8080:8080 -v ragify_data:/data \
+  ghcr.io/strawberry-code/ragify:latest-tika
 ```
 
-**With GitHub OAuth authentication:**
-```bash
-# 1. Create users.yaml with authorized GitHub usernames
-cat > users.yaml << 'EOF'
+Open http://localhost:8080 - upload files and search.
+
+## Image Variants
+
+| Image | Size | Description |
+|-------|------|-------------|
+| `ragify:latest` | ~3GB | Text and code files only |
+| `ragify:latest-tika` | ~4GB | **Recommended** - PDF, DOCX, XLSX, and 1000+ formats via Apache Tika |
+
+## Production Setup with OAuth
+
+For production, enable GitHub OAuth to restrict access.
+
+### 1. Create GitHub OAuth App
+
+1. Go to [GitHub Developer Settings](https://github.com/settings/developers)
+2. Click "New OAuth App"
+3. Set:
+   - **Application name:** Ragify
+   - **Homepage URL:** `https://your-domain.com`
+   - **Authorization callback URL:** `https://your-domain.com/oauth/github-callback`
+4. Copy Client ID and Client Secret
+
+### 2. Configuration Files
+
+**docker-compose.yml**
+```yaml
+services:
+  ragify:
+    image: ghcr.io/strawberry-code/ragify:latest-tika
+    container_name: ragify
+    ports:
+      - "8080:8080"
+    volumes:
+      - ragify_data:/data
+      - ./users.yaml:/config/users.yaml:ro
+    env_file:
+      - .env
+    restart: unless-stopped
+
+volumes:
+  ragify_data:
+```
+
+**users.yaml** - Authorized GitHub usernames
+```yaml
 authorized_users:
   - username: your-github-username
-EOF
-
-# 2. Run with OAuth (requires GitHub OAuth App)
-docker run -d --name ragify -p 8080:8080 \
-  -v ragify_data:/data \
-  -v ./users.yaml:/config/users.yaml:ro \
-  -e AUTH_CONFIG=/config/users.yaml \
-  -e GITHUB_CLIENT_ID=your_client_id \
-  -e GITHUB_CLIENT_SECRET=your_client_secret \
-  ghcr.io/strawberry-code/self-hosted-llm-rag:latest
+  - username: teammate-username
 ```
 
-**Image variants:**
-- `ghcr.io/strawberry-code/self-hosted-llm-rag:latest` - Standard (~5GB)
-- `ghcr.io/strawberry-code/self-hosted-llm-rag:latest-tika` - With Java/Tika for PDF/Office
+**.env** - Environment variables
+```bash
+AUTH_CONFIG=/config/users.yaml
+GITHUB_CLIENT_ID=Ov23li...
+GITHUB_CLIENT_SECRET=abc123...
+BASE_URL=https://your-domain.com
+```
 
----
-
-## CLI Quick Start
-
-### 1. Install Dependencies
+### 3. Start
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+docker compose up -d
 ```
 
-### 2. Check Prerequisites
+## Environment Variables
 
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `AUTH_CONFIG` | - | Path to users.yaml (enables OAuth) |
+| `GITHUB_CLIENT_ID` | - | GitHub OAuth App Client ID |
+| `GITHUB_CLIENT_SECRET` | - | GitHub OAuth App Secret |
+| `BASE_URL` | `http://localhost:8080` | Public URL for OAuth callbacks |
+| `API_PORT` | `8080` | API and Web UI port |
+| `OLLAMA_MODEL` | `nomic-embed-text` | Embedding model |
+
+## Features
+
+### Web UI
+- Upload files via drag & drop
+- Create and manage collections
+- Search with semantic results
+- View indexing job status
+
+### REST API
 ```bash
-python3 ragify.py doctor
+# List collections
+curl http://localhost:8080/api/collections
+
+# Search
+curl -X POST http://localhost:8080/api/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "how to configure", "collection": "docs", "limit": 5}'
+
+# Upload file
+curl -X POST http://localhost:8080/api/upload \
+  -F "file=@document.pdf" \
+  -F "collection=docs"
 ```
 
-This verifies:
-- Python 3.10+ and dependencies
-- Java (for Apache Tika)
-- Ollama with nomic-embed-text model
-- Qdrant vector database
-- Disk space
+### MCP Server (Claude Desktop / Claude Code)
 
-Use `--fix` to auto-install missing Python packages.
+The container exposes an MCP endpoint for Claude integration.
 
-### 3. Index Your Documentation
-
-```bash
-python3 ragify.py index ./docs         # → collection "docs"
-```
-
-Ragify will:
-- Extract text from 1000+ file formats (PDF, DOCX, MD, code files)
-- Split into semantic chunks
-- Generate embeddings with Ollama
-- Store in Qdrant for fast retrieval
-
-**Multiple collections**: The folder name becomes the collection name automatically. This allows you to organize content by topic and avoid bias in search results - querying a physics collection won't return unrelated math results:
-
-```bash
-python3 ragify.py index ./physics      # → collection "physics"
-python3 ragify.py index ./math         # → collection "math"
-python3 ragify.py index ./docs --collection custom  # → explicit name
-```
-
-### 4. Query Your Docs
-
-```bash
-python3 ragify.py query "how does authentication work?"
-python3 ragify.py query "integral calculus" --collection math
-```
-
-**📖 Full documentation**: [docs/RAGIFY.md](docs/RAGIFY.md) | **⚡ Quick reference**: [docs/QUICK_GUIDE.md](docs/QUICK_GUIDE.md)
-
----
-
-## What is Ragify?
-
-**Ragify** is an automated pipeline for indexing local documentation:
-
-- ✅ **No HTTP server** - Direct filesystem access
-- ✅ **Universal formats** - PDF, DOCX, code, markdown (via Apache Tika)
-- ✅ **Smart deduplication** - SHA-256 hash-based incremental updates
-- ✅ **Semantic chunking** - Type-specific strategies per file format
-- ✅ **All-in-one CLI** - Index, query, list, reset commands
-
-### How It Works
-
-```
-Local Documents
-    ↓
-[ragify index] → Extract text, chunk, embed
-    ↓
-[Ollama nomic-embed-text] → Generate vectors (768-dim)
-    ↓
-[Qdrant] → Store vectors + metadata
-    ↓
-[ragify query] → Semantic search
-```
-
----
-
-## Installation
-
-### Prerequisites
-
-1. **Docker + Qdrant** - Vector database
-   ```bash
-   # Install Docker: https://docs.docker.com/engine/install/
-   docker run -d --name qdrant --restart unless-stopped \
-     -p 6333:6333 -v qdrant_storage:/qdrant/storage qdrant/qdrant
-   ```
-2. **Ollama** - For embeddings ([ollama.ai](https://ollama.ai/))
-   ```bash
-   curl -fsSL https://ollama.ai/install.sh | sh
-   ollama pull nomic-embed-text
-   # Ollama runs as systemd service, starts automatically on boot
-   sudo systemctl enable ollama && sudo systemctl start ollama
-   ```
-3. **Python 3.10+** - With pip
-4. **Java 21** - For Apache Tika (optional but recommended)
-   ```bash
-   # Install via sdkman (https://sdkman.io)
-   sudo apt install zip unzip -y   # Ubuntu/Debian
-   curl -s "https://get.sdkman.io" | bash
-   source "$HOME/.sdkman/bin/sdkman-init.sh"
-   sdk install java 21-zulu
-   ```
-
-### Setup
-
-```bash
-# 1. Start Qdrant
-docker run -d -p 6333:6333 -v $(pwd)/qdrant_storage:/qdrant/storage qdrant/qdrant
-
-# 2. Install Ollama and pull model
-ollama pull nomic-embed-text
-
-# 3. Install Python dependencies
-pip install -r requirements.txt
-
-# 4. Verify system
-python3 ragify.py doctor
-```
-
----
-
-## MCP Integration (Optional)
-
-Query your indexed docs from Claude Desktop or Claude Code via MCP.
-
-### Install
-
-No installation needed - uses [uvx](https://github.com/astral-sh/uv):
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-### Configure
-
-Add to your MCP config:
-- **Claude Code**: `.mcp.json` in project root
-- **Claude Desktop**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
+**Claude Code config** (`~/.claude.json`):
 ```json
 {
   "mcpServers": {
     "ragify": {
-      "command": "uvx",
-      "args": ["ragify-mcp"],
-      "env": {
-        "QDRANT_URL": "http://127.0.0.1:6333",
-        "OLLAMA_URL": "http://localhost:11434"
+      "type": "streamable-http",
+      "url": "https://your-domain.com/mcp/sse",
+      "headers": {
+        "Authorization": "Bearer <your-oauth-token>"
       }
     }
   }
 }
 ```
 
-**📖 Detailed MCP setup**: [docs/MCP_SETUP.md](docs/MCP_SETUP.md)
-
-### Why Ollama + nomic-embed-text is Required
-
-Claude is a text generation model - it cannot produce vector embeddings. Semantic search requires converting queries into numerical vectors.
-
-**Architecture A: Single Remote Ollama (recommended)**
-```
-┌─────────────────────┐          ┌─────────────────────────────────────────┐
-│    YOUR MACHINE     │          │            REMOTE SERVER                │
-│                     │          │                                         │
-│  Claude             │          │    ragify index                         │
-│    │                │          │         │ indexing                      │
-│    ▼                │          │         ▼                               │
-│  ┌────────────┐     │  query   │  ┌─────────────────┐      ┌─────────┐   │
-│  │ MCP Server │ ──────────────►│  │ Ollama + nomic  │ ───► │ Qdrant  │   │
-│  └────────────┘     │          │  └─────────────────┘      └────┬────┘   │
-│    ▲                │ results  │                                │        │
-│    └───────────────────────────────────────────────────────────-┘        │
-│                     │          │                                         │
-└─────────────────────┘          └─────────────────────────────────────────┘
-```
-
-**Architecture B: Local Ollama for Queries**
-```
-┌──────────────────────────┐          ┌─────────────────────────────┐
-│      YOUR MACHINE        │          │       REMOTE SERVER         │
-│                          │          │                             │
-│  Claude                  │          │       ragify index          │
-│    │                     │          │            │ indexing       │
-│    ▼                     │          │            ▼                │
-│  ┌────────────┐          │          │  ┌─────────────────┐        │
-│  │ MCP Server │          │          │  │ Ollama + nomic  │        │
-│  └─────┬──────┘          │          │  └────────┬────────┘        │
-│        │                 │          │           │                 │
-│        ▼                 │          │           ▼                 │
-│  ┌─────────────────┐     │  vector  │     ┌─────────┐             │
-│  │ Ollama + nomic  │ ───────────────────► │ Qdrant  │             │
-│  └─────────────────┘     │          │     └────┬────┘             │
-│        ▲                 │ results  │          │                  │
-│        └───────────────────────────────────────┘                  │
-│                          │          │                             │
-└──────────────────────────┘          └─────────────────────────────┘
-```
-
-**Why nomic-embed-text:** State-of-the-art embeddings, only ~274MB, ~50ms per query, 768 dimensions.
-
-Both architectures require the same `nomic-embed-text` model to ensure vector compatibility.
-
-> **Security:** If exposing Ollama remotely, use firewall rules, VPN, or authenticated reverse proxy.
-
-**Architecture C: Remote MCP via SSH (not recommended)**
-
-This setup runs the entire MCP server on a remote machine, with nothing locally. Claude connects via SSH stdio forwarding.
+## Processing Pipeline
 
 ```
-┌────────────────┐          ┌─────────────────────────────────────────┐
-│  YOUR MACHINE  │          │            REMOTE SERVER                │
-│                │          │                                         │
-│  Claude        │   SSH    │  ┌─────────┐  ┌─────────┐  ┌─────────┐  │
-│    │───────────────────────► │ MCP     │─►│ Ollama  │─►│ Qdrant  │  │
-│    │◄──────────────────────  │ Server  │◄─┤ + nomic │◄─┤         │  │
-│                │  stdio   │  └─────────┘  └─────────┘  └─────────┘  │
-└────────────────┘          └─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│                        RAGIFY PIPELINE                               │
+│                                                                      │
+│  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────────┐   │
+│  │  Upload  │───►│  Tika    │───►│ Chunking │───►│  Embedding   │   │
+│  │  (file)  │    │ Extract  │    │ 2-stage  │    │ nomic-embed  │   │
+│  └──────────┘    └──────────┘    └──────────┘    └──────┬───────┘   │
+│                                                          │          │
+│                                                          ▼          │
+│  ┌──────────┐    ┌──────────┐                    ┌──────────────┐   │
+│  │  Search  │◄───│  Qdrant  │◄───────────────────│    Store     │   │
+│  │  Query   │    │  Vector  │                    │   Vectors    │   │
+│  └──────────┘    └──────────┘                    └──────────────┘   │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-⚠️ **Not recommended** because:
-- Adds SSH latency to every MCP request
-- Requires SSH key management and connectivity
-- More complex debugging when issues arise
-- Architectures A or B are simpler and more reliable
+### Pipeline Steps
 
-If you still want this setup, configure `.mcp.json`:
+1. **Upload** - Files uploaded via Web UI or API
+2. **Extraction** - Apache Tika extracts text from PDF, DOCX, XLSX, etc. (tika variant only)
+3. **Chunking** - Two-stage semantic chunking:
+   - Stage 1: Macro chunks with Chonkie (1024 tokens)
+   - Stage 2: Fine chunks with Semchunk (512 tokens, 50 overlap)
+   - Filter: Validates chunk quality, re-chunks if > 8192 tokens
+4. **Embedding** - Ollama generates 768-dim vectors with nomic-embed-text
+5. **Storage** - Vectors stored in Qdrant with metadata (file hash, URL, title)
+6. **Deduplication** - SHA-256 file hash prevents re-indexing unchanged files
 
-```json
-{
-  "mcpServers": {
-    "ragify": {
-      "command": "ssh",
-      "args": [
-        "-i", "~/.ssh/your_key.pem",
-        "-o", "StrictHostKeyChecking=no",
-        "-o", "BatchMode=yes",
-        "user@your-server-ip",
-        "PATH=$HOME/.local/bin:$PATH QDRANT_URL=http://localhost:6333 OLLAMA_URL=http://localhost:11434 uvx ragify-mcp"
-      ]
-    }
-  }
-}
-```
+### Supported Formats
 
-> **Note:** `PATH=$HOME/.local/bin:$PATH` is required because non-interactive SSH doesn't load `.bashrc`.
+**Base image:** `.txt`, `.md`, `.py`, `.js`, `.ts`, `.java`, `.go`, `.rs`, `.c`, `.cpp`, `.json`, `.yaml`, `.xml`, `.html`, `.css`
 
----
+**Tika image (additional):** `.pdf`, `.docx`, `.xlsx`, `.pptx`, `.odt`, `.rtf`, `.epub`, and 1000+ more
 
-## Components
-
-- **Ragify** - Document indexing CLI (Python)
-- **Qdrant** - Vector database (Docker)
-- **Ollama** - Local embeddings (nomic-embed-text, 768-dim)
-- **[ragify-mcp](https://pypi.org/project/ragify-mcp/)** - MCP server for Claude Desktop/Code (optional)
-
----
-
-## Documentation
-
-- **[Ragify Documentation](docs/RAGIFY.md)** - Complete guide
-- **[Quick Reference](docs/QUICK_GUIDE.md)** - Command cheatsheet
-- **[MCP Setup](docs/MCP_SETUP.md)** - Claude Desktop integration
-
----
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `QDRANT_URL` | http://localhost:6333 | Qdrant server URL |
-| `QDRANT_API_KEY` | - | API key for Qdrant authentication (optional) |
-| `OLLAMA_URL` | http://localhost:11434 | Ollama server URL |
+## Health Check
 
 ```bash
-# Example: connect to remote Qdrant with API key
-export QDRANT_URL=http://your-server:6333
-export QDRANT_API_KEY=your-secret-key
-python3 ragify.py index ./docs
+curl http://localhost:8080/health
+# {"status": "healthy", "ollama": "ok", "qdrant": "ok"}
 ```
 
----
+## Volumes
 
-## Running Long Indexing Jobs (SSH)
+| Path | Description |
+|------|-------------|
+| `/data` | Qdrant storage (persist this!) |
+| `/config/users.yaml` | Authorized users (read-only) |
+| `/tmp/collections` | Uploaded files (temporary, 15-day retention) |
 
-Use tmux to keep indexing running after disconnecting from SSH:
+## CLI Access (Inside Container)
 
 ```bash
-# Start tmux session
-tmux new -s ragify
+docker exec -it ragify bash
 
-# Run indexing
-source .venv/bin/activate
-python3 ragify.py index ./docs
+# Index a directory
+python3 ragify.py index /data/docs
 
-# Detach: Ctrl+B, then D
-# Reconnect later: tmux attach -t ragify
+# Query
+python3 ragify.py query "search term"
+
+# List collections
+python3 ragify.py list
 ```
 
----
+## Troubleshooting
+
+### Container won't start
+```bash
+docker logs ragify
+```
+Check for:
+- Missing `AUTH_CONFIG` when OAuth env vars are set
+- Invalid `users.yaml` format
+
+### PDF files not processed
+Make sure you're using the `-tika` image variant:
+```bash
+docker pull ghcr.io/strawberry-code/ragify:latest-tika
+```
+
+### OAuth callback error
+Verify `BASE_URL` matches your actual domain and GitHub OAuth App callback URL.
 
 ## License
 
 MIT License - See [LICENSE](LICENSE)
 
----
-
 ## Contributing
 
-This is a personal project. Feel free to fork and adapt for your needs.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and guidelines.
