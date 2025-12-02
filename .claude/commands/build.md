@@ -1,6 +1,6 @@
-# Build Immagini Docker
+# Build Immagini Docker Multi-Architettura
 
-Builda le immagini Docker per linux/amd64 (compatibile con server cloud).
+Builda le immagini Docker per linux/amd64 (Ubuntu/cloud) e linux/arm64 (Mac M1/M2).
 
 ## Sintassi
 
@@ -34,34 +34,63 @@ Chiedi all'utente quale variante buildare:
 - `tika` - Dockerfile.tika (con Tika per PDF, ~4GB)
 - `both` - Entrambe
 
-### Step 3: Esegui build
+### Step 3: Esegui build multi-arch
 
-**Per variante base:**
-```bash
-podman build --platform linux/amd64 \
-  -t ghcr.io/strawberry-code/ragify:{version} \
-  -t ghcr.io/strawberry-code/ragify:latest \
-  -f Dockerfile .
-```
+Per ogni variante, builda entrambe le architetture.
 
-**Per variante tika:**
+**Build arm64 (nativo su Mac, veloce):**
 ```bash
-podman build --platform linux/amd64 \
-  -t ghcr.io/strawberry-code/ragify:{version}-tika \
-  -t ghcr.io/strawberry-code/ragify:latest-tika \
+podman build --platform linux/arm64 \
+  -t ghcr.io/strawberry-code/ragify:{version}-tika-arm64 \
   -f Dockerfile.tika .
 ```
 
-### Step 4: Verifica
+**Build amd64 (emulato su Mac, lento ~10 min):**
+```bash
+podman build --platform linux/amd64 \
+  -t ghcr.io/strawberry-code/ragify:{version}-tika-amd64 \
+  -f Dockerfile.tika .
+```
+
+**NOTA:** Le due build possono essere eseguite in parallelo per risparmiare tempo.
+
+### Step 4: Crea manifest multi-arch
+
+```bash
+# Rimuovi manifest esistente se presente
+podman manifest rm ghcr.io/strawberry-code/ragify:{version}-tika 2>/dev/null || true
+
+# Crea nuovo manifest
+podman manifest create ghcr.io/strawberry-code/ragify:{version}-tika
+
+# Aggiungi le immagini
+podman manifest add ghcr.io/strawberry-code/ragify:{version}-tika \
+  ghcr.io/strawberry-code/ragify:{version}-tika-arm64
+
+podman manifest add ghcr.io/strawberry-code/ragify:{version}-tika \
+  ghcr.io/strawberry-code/ragify:{version}-tika-amd64
+
+# Crea anche manifest per latest
+podman manifest rm ghcr.io/strawberry-code/ragify:latest-tika 2>/dev/null || true
+podman manifest create ghcr.io/strawberry-code/ragify:latest-tika
+podman manifest add ghcr.io/strawberry-code/ragify:latest-tika \
+  ghcr.io/strawberry-code/ragify:{version}-tika-arm64
+podman manifest add ghcr.io/strawberry-code/ragify:latest-tika \
+  ghcr.io/strawberry-code/ragify:{version}-tika-amd64
+```
+
+### Step 5: Verifica
 
 ```bash
 podman images | grep ragify
+podman manifest inspect ghcr.io/strawberry-code/ragify:{version}-tika
 ```
 
-### Step 5: Output
+### Step 6: Output
 
 Mostra:
-- Tag creati
+- Tag creati per entrambe le architetture
+- Manifest multi-arch creati
 - Dimensione immagini
 - Prossimo comando: `/push-ghcr` o `/push-ghcr {version}`
 
@@ -70,20 +99,23 @@ Mostra:
 ## Esempio
 
 ```
-/build 1.1.0
+/build 1.1.3
 
-Building ragify:1.1.0-tika...
-✓ ghcr.io/strawberry-code/ragify:1.1.0-tika
-✓ ghcr.io/strawberry-code/ragify:latest-tika
+Building ragify:1.1.3-tika (arm64 + amd64)...
+✓ ghcr.io/strawberry-code/ragify:1.1.3-tika-arm64
+✓ ghcr.io/strawberry-code/ragify:1.1.3-tika-amd64
+✓ Manifest: ghcr.io/strawberry-code/ragify:1.1.3-tika (multi-arch)
+✓ Manifest: ghcr.io/strawberry-code/ragify:latest-tika (multi-arch)
 
-Prossimo step: /push-ghcr 1.1.0
+Prossimo step: /push-ghcr 1.1.3
 ```
 
 ---
 
 ## Note
 
-- Build usa `--platform linux/amd64` per compatibilità server
-- Il build può richiedere 5-10 minuti
-- Se il build fallisce per rete, riprovare
-- Usa `podman` (o `docker` se non disponibile)
+- Build arm64 è veloce su Mac (nativo)
+- Build amd64 usa emulazione QEMU (~10 min)
+- Le build usano cache per layer non modificati
+- Il manifest combina entrambe le architetture in un singolo tag
+- Docker/Podman seleziona automaticamente l'architettura corretta al pull

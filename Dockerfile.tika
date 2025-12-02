@@ -85,24 +85,29 @@ RUN ollama serve & \
 # Pre-download Tika JAR and ensure it's in the expected location
 RUN python3 <<'PYEOF'
 import os
-import shutil
-from tika import parser, tika
+import glob
+from tika import parser
 
-# Trigger download
+# Trigger download (this downloads JAR to /tmp/)
 parser.from_buffer(b'test', xmlContent=False)
 
-# Get the actual JAR path
-jar_path = getattr(tika, 'TikaJarPath', None)
-print(f'Tika JAR downloaded to: {jar_path}')
+# Find the JAR file (handles versioned names like tika-server-standard-3.1.0.jar)
+expected_path = '/tmp/tika-server.jar'
+if os.path.exists(expected_path):
+    print(f'Tika JAR found at {expected_path}')
+else:
+    # Search for versioned JAR
+    jars = glob.glob('/tmp/tika-server*.jar')
+    if jars:
+        print(f'Found JAR: {jars[0]}')
+        os.symlink(jars[0], expected_path)
+        print(f'Created symlink: {expected_path} -> {jars[0]}')
+    else:
+        raise Exception('No Tika JAR found in /tmp/')
 
-# Copy to expected location if different
-if jar_path and os.path.exists(jar_path) and jar_path != '/tmp/tika-server.jar':
-    shutil.copy2(jar_path, '/tmp/tika-server.jar')
-    print('Copied to /tmp/tika-server.jar')
-
-# Verify
-assert os.path.exists('/tmp/tika-server.jar'), 'Tika JAR not found at /tmp/tika-server.jar'
-print('Tika JAR verified at /tmp/tika-server.jar')
+# Final verification
+assert os.path.exists(expected_path), f'Tika JAR not found at {expected_path}'
+print(f'Tika JAR verified at {expected_path}')
 PYEOF
 
 # Create data directory for Qdrant

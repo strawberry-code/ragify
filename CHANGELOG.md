@@ -7,8 +7,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+- Multi-arch Docker images support (linux/amd64 + linux/arm64) for Ubuntu and Mac compatibility
+- Updated `/build` and `/push-ghcr` slash commands for multi-arch manifest workflow
+
 ### Fixed
-- Dockerfile.tika Tika pre-download script now uses heredoc for proper Python syntax
+- Dockerfile.tika Tika pre-download script now uses heredoc and handles versioned JAR names
+- Removed obsolete mcp_server.py reference from Dockerfiles
 
 ## [1.1.3] - 2025-12-02
 
