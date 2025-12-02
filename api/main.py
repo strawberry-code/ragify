@@ -4,10 +4,25 @@ Ragify API - FastAPI application for container deployment.
 Provides REST API for ragify operations, MCP SSE transport, and serves the frontend SPA.
 """
 
+import logging
 import os
+import sys
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+# Configure logging early, before any other imports
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[logging.StreamHandler(sys.stdout)],
+    force=True  # Override any existing configuration
+)
+# Disable buffering for real-time logs
+sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure') else None
+
+logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
@@ -40,10 +55,10 @@ FRONTEND_DIR = Path(__file__).parent.parent / 'frontend'
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
     # Startup
-    print(f"Ragify API starting on port {API_PORT}")
+    logger.info(f"Ragify API starting on port {API_PORT}")
     yield
     # Shutdown
-    print("Ragify API shutting down")
+    logger.info("Ragify API shutting down")
 
 
 app = FastAPI(

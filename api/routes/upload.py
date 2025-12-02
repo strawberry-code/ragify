@@ -17,8 +17,6 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form, BackgroundTasks
 from pydantic import BaseModel
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Add project root to path for imports
