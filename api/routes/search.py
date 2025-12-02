@@ -1,11 +1,15 @@
 """Search API routes."""
 
 import os
+import warnings
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
+
+# Suppress Qdrant client version warnings
+warnings.filterwarnings("ignore", message=".*Qdrant client version.*incompatible.*")
 
 router = APIRouter()
 

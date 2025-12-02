@@ -4,6 +4,10 @@ Standalone package for distribution via PyPI/uvx.
 """
 
 import os
+import warnings
+
+# Suppress Qdrant client version warnings
+warnings.filterwarnings('ignore', message='.*Qdrant client version.*incompatible.*')
 from collections import Counter
 from pathlib import Path
 

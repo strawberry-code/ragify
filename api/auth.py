@@ -140,7 +140,7 @@ async def login(request: Request):
     state = secrets.token_urlsafe(32)
 
     # Store state in cookie (short-lived)
-    redirect_uri = f"{BASE_URL}/auth/callback"
+    redirect_uri = f"{BASE_URL}/oauth/github-callback"
     auth_url = (
         f"{GITHUB_AUTH_URL}?"
         f"client_id={GITHUB_CLIENT_ID}&"

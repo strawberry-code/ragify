@@ -2,13 +2,15 @@
 Authentication middleware for FastAPI.
 
 Protects routes based on authentication status and configuration.
+Supports both session cookies and Bearer tokens for OAuth 2.0.
 """
 
 from fastapi import Request, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from api.auth import is_auth_enabled, get_current_user
+from api.oauth import validate_bearer_token
 
 
 # Paths that don't require authentication
@@ -23,13 +25,16 @@ PUBLIC_PATHS = {
     "/api/redoc",
     "/api/openapi.json",
     "/static",
-    "/favicon.ico"
+    "/favicon.ico",
+    "/register",  # OAuth dynamic client registration
 }
 
 # Path prefixes that don't require authentication
 PUBLIC_PREFIXES = (
     "/static/",
     "/auth/",
+    "/.well-known/",  # OAuth discovery endpoints
+    "/oauth/",  # OAuth endpoints (authorize, token, register)
 )
 
 
@@ -73,21 +78,32 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not is_auth_enabled():
             return await call_next(request)
 
-        # Check authentication
+        # Check for Bearer token first (for MCP/API clients)
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            token = auth_header[7:]  # Remove "Bearer " prefix
+            token_data = validate_bearer_token(token)
+            if token_data:
+                # Token is valid, continue
+                request.state.user = token_data
+                return await call_next(request)
+
+        # Check session cookie (for browser users)
         user = get_current_user(request)
 
         if not user:
-            # API routes return 401
+            # API routes return 401 JSON response
             if path.startswith("/api/") or path.startswith("/mcp/"):
-                raise HTTPException(
+                return JSONResponse(
                     status_code=401,
-                    detail="Authentication required"
+                    content={"detail": "Authentication required"}
                 )
 
             # Browser routes redirect to login
             return RedirectResponse(url="/auth/login", status_code=302)
 
         # User is authenticated, continue
+        request.state.user = user
         return await call_next(request)
 
 
@@ -96,6 +112,7 @@ def require_auth(request: Request) -> dict:
     Dependency to require authentication.
 
     Use as a FastAPI dependency on routes that need auth.
+    Supports both session cookies and Bearer tokens.
 
     Args:
         request: FastAPI request
@@ -109,6 +126,19 @@ def require_auth(request: Request) -> dict:
     if not is_auth_enabled():
         return {"username": "anonymous", "authenticated": False}
 
+    # Check for Bearer token first
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        token_data = validate_bearer_token(token)
+        if token_data:
+            return {
+                "username": token_data.get("username"),
+                "authenticated": True,
+                "auth_type": "bearer"
+            }
+
+    # Check session cookie
     user = get_current_user(request)
     if not user:
         raise HTTPException(
@@ -116,4 +146,4 @@ def require_auth(request: Request) -> dict:
             detail="Authentication required"
         )
 
-    return user
+    return {**user, "auth_type": "session"}

@@ -5,6 +5,10 @@ Riutilizza il codice esistente di lib/ per embedding e Qdrant.
 """
 
 import os
+import warnings
+
+# Suppress Qdrant client version warnings
+warnings.filterwarnings('ignore', message='.*Qdrant client version.*incompatible.*')
 import sys
 from collections import Counter
 from pathlib import Path

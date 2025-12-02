@@ -8,6 +8,7 @@ allowing Claude Desktop and other clients to connect via HTTP.
 import os
 import json
 import asyncio
+import warnings
 from typing import Optional
 from uuid import uuid4
 
@@ -19,6 +20,9 @@ from sse_starlette.sse import EventSourceResponse
 # Import MCP tools logic
 from qdrant_client import QdrantClient
 import requests
+
+# Suppress Qdrant client version warnings
+warnings.filterwarnings("ignore", message=".*Qdrant client version.*incompatible.*")
 
 router = APIRouter()
 

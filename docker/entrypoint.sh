@@ -58,8 +58,13 @@ start_qdrant() {
     # Create data directory if needed
     mkdir -p "${QDRANT_PATH:-/data/qdrant}"
 
-    # Start Qdrant in background
-    qdrant --storage-path "${QDRANT_PATH:-/data/qdrant}" &
+    # Set Qdrant environment variables
+    export QDRANT__STORAGE__STORAGE_PATH="${QDRANT_PATH:-/data/qdrant}"
+    export QDRANT__SERVICE__TELEMETRY_DISABLED=true
+    export QDRANT__SERVICE__STATIC_CONTENT_DIR=""
+
+    # Start Qdrant in background with config
+    qdrant --config-path /app/docker/qdrant_config.yaml 2>&1 | grep -v "Config file not found" &
     QDRANT_PID=$!
 
     # Wait for Qdrant to be ready

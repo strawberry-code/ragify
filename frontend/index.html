@@ -3,70 +3,171 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ragify - RAG Documentation Search</title>
-    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <title>Ragify - Control Board</title>
+    <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+    <link rel="apple-touch-icon" href="/static/favicon.svg">
     <script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body x-data="ragifyApp()" x-init="init()">
-    <!-- Navigation -->
-    <nav class="navbar">
-        <div class="nav-brand">
+    <!-- Header Panel -->
+    <header class="header">
+        <div class="header-brand">
             <span class="logo">R</span>
-            <span>Ragify</span>
+            <span>RAGIFY</span>
         </div>
-        <div class="nav-links">
-            <a href="#" @click.prevent="currentView = 'dashboard'" :class="{ active: currentView === 'dashboard' }">Dashboard</a>
-            <a href="#" @click.prevent="currentView = 'collections'" :class="{ active: currentView === 'collections' }">Collections</a>
-            <a href="#" @click.prevent="currentView = 'upload'" :class="{ active: currentView === 'upload' }">Upload</a>
-            <a href="#" @click.prevent="currentView = 'search'" :class="{ active: currentView === 'search' }">Search</a>
+        <div class="header-status">
+            <span class="status-badge" :class="status.ollama === 'ok' ? 'status-ok' : ''">Ollama</span>
+            <span class="status-badge" :class="status.qdrant === 'ok' ? 'status-ok' : ''">Qdrant</span>
+            <span class="status-badge"
+                  :class="user ? 'status-ok' : 'status-clickable'"
+                  @click="showLoginModal = !user"
+                  x-text="user ? 'Authenticated' : 'Not Authenticated'"></span>
         </div>
-        <div class="nav-user" x-show="user">
+        <div class="header-user" x-show="user">
             <span x-text="user?.username"></span>
             <a href="/auth/logout" class="btn btn-small">Logout</a>
         </div>
-        <div class="nav-user" x-show="!user && authEnabled">
-            <a href="/auth/login" class="btn btn-primary btn-small">Login with GitHub</a>
-        </div>
-    </nav>
+    </header>
 
     <!-- Main Content -->
     <main class="container">
-        <!-- Dashboard View -->
-        <div x-show="currentView === 'dashboard'" class="view">
-            <h1>Dashboard</h1>
-
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value" x-text="stats.collections"></div>
-                    <div class="stat-label">Collections</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" x-text="stats.documents"></div>
-                    <div class="stat-label">Documents</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-value" x-text="stats.chunks"></div>
-                    <div class="stat-label">Chunks</div>
-                </div>
-            </div>
-
-            <div class="status-section">
+        <div class="main-grid">
+            <!-- Stats Panel -->
+            <section class="section stats-section">
                 <h2>System Status</h2>
-                <div class="status-grid">
-                    <div class="status-item" :class="status.ollama === 'ok' ? 'status-ok' : 'status-error'">
-                        <span class="status-dot"></span>
-                        <span>Ollama</span>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-value" x-text="stats.collections"></div>
+                        <div class="stat-label">Collections</div>
                     </div>
-                    <div class="status-item" :class="status.qdrant === 'ok' ? 'status-ok' : 'status-error'">
-                        <span class="status-dot"></span>
-                        <span>Qdrant</span>
+                    <div class="stat-card">
+                        <div class="stat-value" x-text="stats.documents"></div>
+                        <div class="stat-label">Documents</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-value" x-text="stats.chunks"></div>
+                        <div class="stat-label">Chunks</div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <div class="jobs-section" x-show="jobs.length > 0">
-                <h2>Recent Jobs</h2>
+            <!-- Search Panel -->
+            <section class="section search-section">
+                <h2>Query Interface</h2>
+                <form @submit.prevent="performSearch" class="search-form">
+                    <div class="search-row">
+                        <select x-model="searchCollection" class="search-select">
+                            <template x-for="c in collections" :key="c.name">
+                                <option :value="c.name" x-text="c.name"></option>
+                            </template>
+                        </select>
+                        <input type="text" x-model="searchQuery" placeholder="Enter search query..." required class="search-input">
+                        <button type="submit" class="btn btn-primary" :disabled="searching">
+                            <span x-show="!searching">Search</span>
+                            <span x-show="searching">...</span>
+                        </button>
+                    </div>
+                </form>
+
+                <div class="search-results" x-show="searchResults.length > 0">
+                    <template x-for="(result, index) in searchResults" :key="index">
+                        <div class="result-card">
+                            <div class="result-header">
+                                <span class="result-score" x-text="'SCORE: ' + result.score.toFixed(3)"></span>
+                                <span class="result-file" x-text="result.url"></span>
+                            </div>
+                            <div class="result-title" x-text="result.title || 'Untitled'"></div>
+                            <div class="result-text" x-text="result.text"></div>
+                        </div>
+                    </template>
+                </div>
+            </section>
+
+            <!-- Collections Panel -->
+            <section class="section">
+                <div class="section-header">
+                    <h2>Collections</h2>
+                    <button @click="showCreateCollection = true" class="btn btn-small btn-primary">+ New</button>
+                </div>
+
+                <div class="collections-list">
+                    <template x-for="collection in collections" :key="collection.name">
+                        <div class="collection-item">
+                            <div class="collection-info">
+                                <span class="collection-name" x-text="collection.name"></span>
+                                <span class="collection-count" x-text="collection.points_count + ' chunks'"></span>
+                            </div>
+                            <button @click="confirmDeleteCollection(collection.name)" class="btn btn-small btn-danger">Del</button>
+                        </div>
+                    </template>
+                    <div class="empty-state" x-show="collections.length === 0">
+                        No collections available
+                    </div>
+                </div>
+
+                <!-- Create Collection Modal -->
+                <div class="modal" x-show="showCreateCollection" @click.self="showCreateCollection = false">
+                    <div class="modal-content">
+                        <h2>New Collection</h2>
+                        <form @submit.prevent="createCollection">
+                            <div class="form-group">
+                                <label>Collection Name</label>
+                                <input type="text" x-model="newCollectionName" required pattern="[a-zA-Z0-9_-]+" placeholder="my-collection">
+                            </div>
+                            <div class="form-actions">
+                                <button type="button" @click="showCreateCollection = false" class="btn">Cancel</button>
+                                <button type="submit" class="btn btn-primary">Create</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Upload Panel -->
+            <section class="section">
+                <h2>Document Input</h2>
+
+                <div class="form-group">
+                    <label>Target Collection</label>
+                    <select x-model="uploadCollection">
+                        <template x-for="c in collections" :key="c.name">
+                            <option :value="c.name" x-text="c.name"></option>
+                        </template>
+                    </select>
+                </div>
+
+                <div class="dropzone"
+                     @dragover.prevent="dragOver = true"
+                     @dragleave.prevent="dragOver = false"
+                     @drop.prevent="handleDrop($event)"
+                     :class="{ 'dragover': dragOver }">
+                    <div class="dropzone-content">
+                        <p>Drop files here</p>
+                        <label class="btn btn-primary">
+                            Browse
+                            <input type="file" @change="handleFileSelect($event)" multiple hidden>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="upload-queue" x-show="uploadQueue.length > 0">
+                    <template x-for="(file, index) in uploadQueue" :key="index">
+                        <div class="queue-item">
+                            <span x-text="file.name"></span>
+                            <button @click="uploadQueue.splice(index, 1)" class="btn btn-small">×</button>
+                        </div>
+                    </template>
+                    <button @click="startUpload" class="btn btn-primary btn-full" :disabled="uploading">
+                        <span x-show="!uploading">Upload All</span>
+                        <span x-show="uploading">Processing...</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Jobs Panel -->
+            <section class="section jobs-section" x-show="jobs.length > 0">
+                <h2>Active Operations</h2>
                 <div class="jobs-list">
                     <template x-for="job in jobs" :key="job.job_id">
                         <div class="job-item" :class="'job-' + job.status">
@@ -83,134 +184,26 @@
                         </div>
                     </template>
                 </div>
-            </div>
-        </div>
-
-        <!-- Collections View -->
-        <div x-show="currentView === 'collections'" class="view">
-            <div class="view-header">
-                <h1>Collections</h1>
-                <button @click="showCreateCollection = true" class="btn btn-primary">New Collection</button>
-            </div>
-
-            <div class="collections-grid">
-                <template x-for="collection in collections" :key="collection.name">
-                    <div class="collection-card">
-                        <h3 x-text="collection.name"></h3>
-                        <div class="collection-stats">
-                            <span x-text="collection.points_count + ' chunks'"></span>
-                        </div>
-                        <div class="collection-actions">
-                            <button @click="viewCollection(collection.name)" class="btn btn-small">View</button>
-                            <button @click="confirmDeleteCollection(collection.name)" class="btn btn-small btn-danger">Delete</button>
-                        </div>
-                    </div>
-                </template>
-            </div>
-
-            <!-- Create Collection Modal -->
-            <div class="modal" x-show="showCreateCollection" @click.self="showCreateCollection = false">
-                <div class="modal-content">
-                    <h2>Create Collection</h2>
-                    <form @submit.prevent="createCollection">
-                        <div class="form-group">
-                            <label>Collection Name</label>
-                            <input type="text" x-model="newCollectionName" required pattern="[a-zA-Z0-9_-]+" placeholder="my-collection">
-                        </div>
-                        <div class="form-actions">
-                            <button type="button" @click="showCreateCollection = false" class="btn">Cancel</button>
-                            <button type="submit" class="btn btn-primary">Create</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <!-- Upload View -->
-        <div x-show="currentView === 'upload'" class="view">
-            <h1>Upload Documents</h1>
-
-            <div class="upload-section">
-                <div class="form-group">
-                    <label>Target Collection</label>
-                    <select x-model="uploadCollection">
-                        <template x-for="c in collections" :key="c.name">
-                            <option :value="c.name" x-text="c.name"></option>
-                        </template>
-                    </select>
-                </div>
-
-                <div class="dropzone"
-                     @dragover.prevent="dragOver = true"
-                     @dragleave.prevent="dragOver = false"
-                     @drop.prevent="handleDrop($event)"
-                     :class="{ 'dragover': dragOver }">
-                    <div class="dropzone-content">
-                        <p>Drag & drop files here</p>
-                        <p>or</p>
-                        <label class="btn btn-primary">
-                            Browse Files
-                            <input type="file" @change="handleFileSelect($event)" multiple hidden>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="upload-queue" x-show="uploadQueue.length > 0">
-                    <h3>Upload Queue</h3>
-                    <template x-for="(file, index) in uploadQueue" :key="index">
-                        <div class="queue-item">
-                            <span x-text="file.name"></span>
-                            <button @click="uploadQueue.splice(index, 1)" class="btn btn-small">Remove</button>
-                        </div>
-                    </template>
-                    <button @click="startUpload" class="btn btn-primary" :disabled="uploading">
-                        <span x-show="!uploading">Upload All</span>
-                        <span x-show="uploading">Uploading...</span>
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Search View -->
-        <div x-show="currentView === 'search'" class="view">
-            <h1>Search Documents</h1>
-
-            <div class="search-section">
-                <form @submit.prevent="performSearch" class="search-form">
-                    <div class="form-group">
-                        <label>Collection</label>
-                        <select x-model="searchCollection">
-                            <template x-for="c in collections" :key="c.name">
-                                <option :value="c.name" x-text="c.name"></option>
-                            </template>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label>Query</label>
-                        <input type="text" x-model="searchQuery" placeholder="Enter your search query..." required>
-                    </div>
-                    <button type="submit" class="btn btn-primary" :disabled="searching">
-                        <span x-show="!searching">Search</span>
-                        <span x-show="searching">Searching...</span>
-                    </button>
-                </form>
-
-                <div class="search-results" x-show="searchResults.length > 0">
-                    <h3>Results</h3>
-                    <template x-for="(result, index) in searchResults" :key="index">
-                        <div class="result-card">
-                            <div class="result-header">
-                                <span class="result-score" x-text="'Score: ' + result.score.toFixed(3)"></span>
-                                <span class="result-file" x-text="result.url"></span>
-                            </div>
-                            <div class="result-title" x-text="result.title || 'Untitled'"></div>
-                            <div class="result-text" x-text="result.text"></div>
-                        </div>
-                    </template>
-                </div>
-            </div>
+            </section>
         </div>
     </main>
+
+    <!-- Login Modal -->
+    <div class="modal" x-show="showLoginModal" @click.self="showLoginModal = false">
+        <div class="modal-content">
+            <h2>Authentication Required</h2>
+            <p class="modal-description">Sign in with your GitHub account to access Ragify.</p>
+            <div class="form-actions">
+                <button type="button" @click="showLoginModal = false" class="btn">Cancel</button>
+                <a href="/auth/login" class="btn btn-primary btn-github">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                    </svg>
+                    Login with GitHub
+                </a>
+            </div>
+        </div>
+    </div>
 
     <!-- Toast Notifications -->
     <div class="toast-container">

@@ -227,17 +227,82 @@ def validate_chunk_size(chunk_text: str, max_tokens: int = 8192) -> bool:
     return token_count <= max_tokens
 
 
+def create_chunks(
+    text: str,
+    chunk_size: int = 500,
+    chunk_overlap: int = 50,
+    min_tokens: int = 0,
+    max_tokens: int = 8192
+) -> list[dict]:
+    """
+    Create chunks from text using two-level semantic chunking (chonkie + semchunk).
+
+    Pipeline:
+    1. Chonkie TokenChunker: creates macro-semantic blocks (2x target size)
+    2. Semchunk: refines into fine-grained embedding-ready chunks
+    3. Filter: removes too short/long chunks
+
+    Args:
+        text: Text to chunk
+        chunk_size: Target chunk size in tokens (default: 500)
+        chunk_overlap: Overlap between chunks in tokens (default: 50)
+        min_tokens: Minimum chunk size to keep (default: 50)
+        max_tokens: Maximum chunk size before re-chunking (default: 8192)
+
+    Returns:
+        List of chunk dictionaries with text and metadata
+    """
+    if not text or len(text.strip()) == 0:
+        return []
+
+    try:
+        # Level 1: Chonkie semantic chunking (macro blocks)
+        macro_chunks = semantic_chunk_text(
+            text,
+            chunk_size=chunk_size * 2,  # Larger blocks first
+            chunk_overlap=chunk_overlap
+        )
+
+        if not macro_chunks:
+            logger.warning("No macro chunks created, using fallback")
+            return _fallback_chunk([text], chunk_size, chunk_overlap)
+
+        # Level 2: Semchunk fine-grained chunking
+        fine_chunks = fine_chunk_text(
+            macro_chunks,
+            target_tokens=chunk_size,
+            overlap_tokens=chunk_overlap
+        )
+
+        # Level 3: Filter and validate
+        valid_chunks = filter_chunks(
+            fine_chunks,
+            min_tokens=min_tokens,
+            max_tokens=max_tokens
+        )
+
+        logger.info(f"Created {len(valid_chunks)} chunks (chonkie+semchunk pipeline)")
+        return valid_chunks
+
+    except ChunkingError as e:
+        logger.warning(f"Semantic chunking failed: {e}, using fallback")
+        return _fallback_chunk([text], chunk_size, chunk_overlap)
+    except Exception as e:
+        logger.error(f"Chunking failed: {e}")
+        return _fallback_chunk([text], chunk_size, chunk_overlap)
+
+
 def filter_chunks(
     chunks: list[dict],
-    min_tokens: int = 50,
+    min_tokens: int = 0,
     max_tokens: int = 8192
 ) -> list[dict]:
     """
     Filter chunks by token count.
-    
+
     Args:
         chunks: List of chunk dictionaries
-        min_tokens: Minimum token count (discard too short)
+        min_tokens: Minimum token count - 0 = keep all (default)
         max_tokens: Maximum token count (needs re-chunking)
         
     Returns:

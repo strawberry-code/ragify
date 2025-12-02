@@ -6,9 +6,9 @@
 function ragifyApp() {
     return {
         // State
-        currentView: 'dashboard',
         user: null,
         authEnabled: false,
+        showLoginModal: false,
 
         // Dashboard
         stats: { collections: 0, documents: 0, chunks: 0 },
@@ -21,13 +21,13 @@ function ragifyApp() {
         newCollectionName: '',
 
         // Upload
-        uploadCollection: 'documentation',
+        uploadCollection: '',
         uploadQueue: [],
         uploading: false,
         dragOver: false,
 
         // Search
-        searchCollection: 'documentation',
+        searchCollection: '',
         searchQuery: '',
         searchResults: [],
         searching: false,
@@ -52,7 +52,7 @@ function ragifyApp() {
             try {
                 const res = await fetch('/auth/status');
                 const data = await res.json();
-                this.authEnabled = data.enabled;
+                this.authEnabled = data.enabled === true;
                 if (data.authenticated) {
                     this.user = { username: data.username };
                 }
@@ -66,16 +66,26 @@ function ragifyApp() {
             try {
                 const res = await fetch('/api/collections');
                 const data = await res.json();
+                console.log('API response:', data);
                 this.collections = data.collections || [];
+                console.log('Collections loaded:', this.collections);
 
                 // Update stats
                 this.stats.collections = this.collections.length;
-                this.stats.chunks = this.collections.reduce((sum, c) => sum + c.points_count, 0);
+                this.stats.chunks = this.collections.reduce((sum, c) => sum + (c.points_count || 0), 0);
+                this.stats.documents = this.collections.reduce((sum, c) => sum + (c.documents_count || 0), 0);
+                console.log('Stats updated:', this.stats);
 
-                // Set default upload/search collection
-                if (this.collections.length > 0 && !this.uploadCollection) {
-                    this.uploadCollection = this.collections[0].name;
-                    this.searchCollection = this.collections[0].name;
+                // Set default upload/search collection if not set or invalid
+                if (this.collections.length > 0) {
+                    const collectionNames = this.collections.map(c => c.name);
+                    if (!this.uploadCollection || !collectionNames.includes(this.uploadCollection)) {
+                        this.uploadCollection = this.collections[0].name;
+                    }
+                    if (!this.searchCollection || !collectionNames.includes(this.searchCollection)) {
+                        this.searchCollection = this.collections[0].name;
+                    }
+                    console.log('Default collections set:', this.uploadCollection, this.searchCollection);
                 }
             } catch (e) {
                 console.error('Failed to load collections:', e);
@@ -120,11 +130,6 @@ function ragifyApp() {
             } catch (e) {
                 this.showToast('Failed to delete collection', 'error');
             }
-        },
-
-        viewCollection(name) {
-            // Could expand to show documents
-            this.showToast(`Viewing ${name}`, 'info');
         },
 
         // Status

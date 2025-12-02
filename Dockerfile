@@ -39,8 +39,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install Ollama
 RUN curl -fsSL https://ollama.ai/install.sh | sh
 
-# Install Qdrant (standalone binary)
-RUN curl -L https://github.com/qdrant/qdrant/releases/download/v1.12.4/qdrant-x86_64-unknown-linux-musl.tar.gz | \
+# Install Qdrant (standalone binary - architecture aware)
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
+        QDRANT_ARCH="aarch64-unknown-linux-musl"; \
+    else \
+        QDRANT_ARCH="x86_64-unknown-linux-musl"; \
+    fi && \
+    curl -L "https://github.com/qdrant/qdrant/releases/download/v1.12.4/qdrant-${QDRANT_ARCH}.tar.gz" | \
     tar xz -C /usr/local/bin
 
 # Copy virtual environment from builder

@@ -1,0 +1,12 @@
+service:
+  # Disable telemetry
+  telemetry_disabled: true
+
+  # Disable gRPC (not needed for this use case)
+  grpc_port: null
+
+  # Enable REST API
+  http_port: 6333
+
+  # Disable static web UI to avoid warning
+  static_content_dir: null

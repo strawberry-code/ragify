@@ -16,7 +16,7 @@ from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_
 from starlette.responses import Response
 
 from api.routes import collections, upload, search, system, mcp
-from api import auth
+from api import auth, oauth
 from api.middleware.auth_middleware import AuthMiddleware
 
 # Metrics
@@ -80,6 +80,7 @@ async def metrics_middleware(request: Request, call_next):
 app.add_middleware(AuthMiddleware)
 
 # Include routers
+app.include_router(oauth.router, tags=["OAuth"])  # OAuth at root for .well-known paths
 app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
 app.include_router(collections.router, prefix="/api/collections", tags=["Collections"])
 app.include_router(upload.router, prefix="/api", tags=["Upload"])
@@ -155,6 +156,25 @@ async def metrics():
 # Serve frontend static files
 if FRONTEND_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(FRONTEND_DIR / "static")), name="static")
+
+
+# Serve favicon
+@app.get("/favicon.ico", tags=["Frontend"], include_in_schema=False)
+@app.get("/favicon.svg", tags=["Frontend"], include_in_schema=False)
+async def serve_favicon():
+    """Serve favicon."""
+    favicon_path = FRONTEND_DIR / "static" / "favicon.svg"
+    if favicon_path.exists():
+        return FileResponse(str(favicon_path), media_type="image/svg+xml")
+    return Response(status_code=204)
+
+
+# Serve apple touch icons (return 204 No Content to suppress 404)
+@app.get("/apple-touch-icon.png", tags=["Frontend"], include_in_schema=False)
+@app.get("/apple-touch-icon-precomposed.png", tags=["Frontend"], include_in_schema=False)
+async def serve_apple_icon():
+    """Serve apple touch icon (or empty response)."""
+    return Response(status_code=204)
 
 
 # Serve frontend SPA (catch-all for client-side routing)

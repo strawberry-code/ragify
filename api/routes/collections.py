@@ -1,12 +1,16 @@
 """Collections API routes."""
 
 import os
+import warnings
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 from qdrant_client.http import models
+
+# Suppress Qdrant client version warnings
+warnings.filterwarnings("ignore", message=".*Qdrant client version.*incompatible.*")
 
 router = APIRouter()
 
@@ -32,7 +36,6 @@ class CollectionInfo(BaseModel):
     """Collection information response."""
     name: str
     points_count: int
-    vectors_count: int
     status: str
 
 
@@ -56,16 +59,49 @@ async def list_collections():
         collections = client.get_collections()
 
         result = []
+        total_documents = 0
+
         for collection in collections.collections:
             info = client.get_collection(collection.name)
+
+            # Count unique documents (sources) in collection
+            documents_count = 0
+            if info.points_count and info.points_count > 0:
+                try:
+                    sources = set()
+                    offset = None
+                    while True:
+                        points, offset = client.scroll(
+                            collection_name=collection.name,
+                            limit=1000,
+                            offset=offset,
+                            with_payload=["url"],
+                            with_vectors=False
+                        )
+                        for point in points:
+                            url = point.payload.get("url", "")
+                            if url:
+                                sources.add(url)
+                        if offset is None:
+                            break
+                    documents_count = len(sources)
+                except Exception:
+                    documents_count = 0
+
+            total_documents += documents_count
+
             result.append({
                 "name": collection.name,
-                "points_count": info.points_count,
-                "vectors_count": info.vectors_count,
+                "points_count": info.points_count or 0,
+                "documents_count": documents_count,
                 "status": info.status.value if info.status else "unknown"
             })
 
-        return {"collections": result, "total": len(result)}
+        return {
+            "collections": result,
+            "total": len(result),
+            "total_documents": total_documents
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -124,14 +160,33 @@ async def get_collection(name: str):
         client = get_qdrant_client()
         info = client.get_collection(name)
 
+        # Handle both unnamed and named vector configurations
+        vector_size = None
+        distance = None
+        if info.config and info.config.params:
+            vectors = info.config.params.vectors
+            if vectors:
+                # Check if it's a dict (named vectors) or VectorParams (unnamed)
+                if isinstance(vectors, dict):
+                    # Get first named vector config
+                    first_key = next(iter(vectors), None)
+                    if first_key and vectors[first_key]:
+                        vector_size = vectors[first_key].size
+                        distance = vectors[first_key].distance.value if vectors[first_key].distance else None
+                else:
+                    # Unnamed vectors - direct access
+                    vector_size = getattr(vectors, 'size', None)
+                    distance = getattr(vectors, 'distance', None)
+                    if distance:
+                        distance = distance.value if hasattr(distance, 'value') else str(distance)
+
         return {
             "name": name,
-            "points_count": info.points_count,
-            "vectors_count": info.vectors_count,
+            "points_count": info.points_count or 0,
             "status": info.status.value if info.status else "unknown",
             "config": {
-                "vector_size": info.config.params.vectors.size if info.config.params.vectors else None,
-                "distance": info.config.params.vectors.distance.value if info.config.params.vectors else None
+                "vector_size": vector_size,
+                "distance": distance
             }
         }
     except Exception as e:
@@ -250,8 +305,7 @@ async def collection_stats(name: str):
 
         return {
             "collection": name,
-            "points_count": info.points_count,
-            "vectors_count": info.vectors_count,
+            "points_count": info.points_count or 0,
             "documents_count": len(sources),
             "status": info.status.value if info.status else "unknown"
         }

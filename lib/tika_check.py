@@ -237,6 +237,17 @@ def ensure_tika_ready(interactive: bool = True, auto_skip: bool = False) -> bool
         return False
 
 
+def is_tika_available() -> bool:
+    """
+    Simple check if Tika is available for use.
+
+    Returns:
+        True if Java and Tika JAR are available, False otherwise.
+    """
+    status = check_tika_available()
+    return status['can_use_tika']
+
+
 def print_tika_status():
     """Print detailed Tika status for debugging."""
     status = check_tika_available()

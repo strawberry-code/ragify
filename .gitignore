@@ -44,5 +44,7 @@ markdown_urls.txt
 # Docker/Container
 .env
 users.yaml
+docker-compose.yml
 !docker/users.yaml.example
+!docker-compose.yml.example
 !.env.example

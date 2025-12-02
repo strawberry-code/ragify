@@ -11,6 +11,8 @@ __version__ = '1.0.0'
 import warnings
 # Suppress tika pkg_resources deprecation warning
 warnings.filterwarnings('ignore', message='.*pkg_resources is deprecated.*', category=UserWarning)
+# Suppress Qdrant client version warnings
+warnings.filterwarnings('ignore', message='.*Qdrant client version.*incompatible.*')
 
 import argparse
 import json
@@ -667,7 +669,18 @@ Environment variables:
             print("="*80)
             print(f"\n📦 General Statistics:")
             print(f"   Total chunks: {collection_info.points_count}")
-            print(f"   Vector size: {collection_info.config.params.vectors.size}")
+            # Handle both unnamed and named vector configurations
+            vector_size = None
+            if collection_info.config and collection_info.config.params:
+                vectors = collection_info.config.params.vectors
+                if vectors:
+                    if isinstance(vectors, dict):
+                        first_key = next(iter(vectors), None)
+                        if first_key and vectors[first_key]:
+                            vector_size = vectors[first_key].size
+                    else:
+                        vector_size = getattr(vectors, 'size', None)
+            print(f"   Vector size: {vector_size}")
 
             # Scroll all points
             print(f"\n🔍 Loading documents...")
