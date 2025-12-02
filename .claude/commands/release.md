@@ -1,77 +1,123 @@
 # Release Completa
 
-Esegue in sequenza: commit, build, push su GHCR.
+Esegue in sequenza: commit release, build, push GHCR.
+
+## Sintassi
+
+```
+/release patch      # Release patch: 1.2.3 → 1.2.4
+/release minor      # Release minor: 1.2.3 → 1.3.0
+/release major      # Release major: 1.2.3 → 2.0.0
+```
+
+## Argomento: $ARGUMENTS
+
+**RICHIESTO:** Deve essere `patch`, `minor`, o `major`.
+
+---
 
 ## Flusso
 
-### Step 1: Commit
-- Verifica modifiche pendenti
-- Aggiorna CHANGELOG.md
-- Commit con conventional commits
-- Push su GitHub
+### Step 1: Pre-check
 
-### Step 2: Build
-- Chiedi versione (es. `1.0.2`)
-- Build immagine base (Dockerfile)
-- Build immagine tika (Dockerfile.tika)
-- Usa `--platform linux/amd64`
-
-### Step 3: Push GHCR
-- Push tutte le immagini buildate
-- Verifica upload completato
-
-### Step 4: Tag Git (opzionale)
-- Chiedi se creare tag git: `v{version}`
-- Se sì: `git tag v{version} && git push --tags`
-
-## Istruzioni
-
-1. **Prima di iniziare**, mostra lo stato attuale:
 ```bash
 git status
 git log -1 --oneline
-podman images | grep ragify
 ```
 
-2. **Chiedi conferma** per procedere con la release
+Verifica:
+- Nessuna modifica non committata (o chiedi di includerle)
+- Branch è `main`
 
-3. **Chiedi la versione** da rilasciare (es. `1.0.2`)
+### Step 2: Leggi versione corrente
 
-4. **Esegui sequenzialmente**:
-   - Commit (se ci sono modifiche)
-   - Build entrambe le varianti
-   - Push su GHCR
-   - Tag git (se confermato)
+```bash
+# Da CHANGELOG.md, trova primo ## [x.y.z]
+grep -m1 '## \[' CHANGELOG.md
+```
 
-5. **Al termine**, mostra riepilogo:
-   - Commit hash
-   - Tag git (se creato)
-   - Immagini pubblicate
-   - Comandi per deploy su server
+Calcola nuova versione in base all'argomento.
 
-## Esempio output finale
+### Step 3: Mostra piano
 
 ```
-=== RELEASE v1.0.2 COMPLETATA ===
+=== RELEASE PLAN ===
+Versione corrente: 1.0.0
+Nuova versione:    1.1.0
+Tipo:              minor
+
+Azioni:
+1. Aggiorna CHANGELOG.md (Unreleased → 1.1.0)
+2. Commit: chore(release): rilascia versione 1.1.0
+3. Tag: v1.1.0
+4. Push: origin/main + tag
+5. Build: ragify:1.1.0-tika
+6. Push GHCR: ghcr.io/strawberry-code/ragify:1.1.0-tika
+
+Procedere? [y/N]
+```
+
+### Step 4: Esegui release
+
+**4.1 Aggiorna CHANGELOG.md**
+- Rinomina `## [Unreleased]` → `## [nuova_versione] - YYYY-MM-DD`
+- Aggiungi nuova sezione `## [Unreleased]` vuota
+
+**4.2 Commit**
+```bash
+git add -A
+git commit -m "chore(release): rilascia versione {version}"
+```
+
+**4.3 Tag**
+```bash
+git tag v{version}
+```
+
+**4.4 Push git**
+```bash
+git push origin main
+git push origin v{version}
+```
+
+**4.5 Build Docker**
+```bash
+podman build --platform linux/amd64 \
+  -t ghcr.io/strawberry-code/ragify:{version}-tika \
+  -t ghcr.io/strawberry-code/ragify:latest-tika \
+  -f Dockerfile.tika .
+```
+
+**4.6 Push GHCR**
+```bash
+podman push ghcr.io/strawberry-code/ragify:{version}-tika
+podman push ghcr.io/strawberry-code/ragify:latest-tika
+```
+
+### Step 5: Riepilogo finale
+
+```
+=== RELEASE v1.1.0 COMPLETATA ===
 
 Git:
-  - Commit: a1b2c3d "feat(docker): ..."
-  - Tag: v1.0.2
-  - Push: origin/main
+  Commit: abc1234 "chore(release): rilascia versione 1.1.0"
+  Tag: v1.1.0
+  Remote: origin/main
 
-Docker Images:
-  - ghcr.io/strawberry-code/ragify:1.0.2
-  - ghcr.io/strawberry-code/ragify:latest
-  - ghcr.io/strawberry-code/ragify:1.0.2-tika
-  - ghcr.io/strawberry-code/ragify:latest-tika
+Docker:
+  ghcr.io/strawberry-code/ragify:1.1.0-tika
+  ghcr.io/strawberry-code/ragify:latest-tika
 
-Deploy su server:
+Deploy:
   docker pull ghcr.io/strawberry-code/ragify:latest-tika
   docker compose down && docker compose up -d
 ```
 
+---
+
 ## Note
 
-- NON procedere senza conferma esplicita dell'utente ad ogni step
-- Se un passaggio fallisce, fermarsi e chiedere come procedere
-- Il processo completo può richiedere 10-15 minuti
+- Richiede conferma prima di ogni step critico
+- Se un passaggio fallisce, si ferma e chiede come procedere
+- Il processo completo richiede ~10-15 minuti
+- Builda solo variante `-tika` (la più usata)
