@@ -213,12 +213,13 @@ class RagifyPipeline:
         except Exception as e:
             self.logger.warning(f"Failed to ensure collection exists: {e}")
 
-    def process_directory(self, root_path: Path) -> Dict:
+    def process_directory(self, root_path: Path, progress_callback=None) -> Dict:
         """
         Process all files in a directory.
 
         Args:
             root_path: Root directory to process
+            progress_callback: Optional callback(stage, progress) for progress updates
 
         Returns:
             Processing statistics
@@ -244,7 +245,7 @@ class RagifyPipeline:
         with tqdm(total=len(files), desc="Processing files", unit="file") as pbar:
             for file_path in files:
                 try:
-                    self.process_file(file_path, pbar)
+                    self.process_file(file_path, pbar, progress_callback)
                 except Exception as e:
                     self.logger.error(f"Fatal error processing {file_path}: {e}")
                     self.stats.failed_files += 1
@@ -262,13 +263,14 @@ class RagifyPipeline:
             'duration': self.stats.duration()
         }
 
-    def process_file(self, file_path: Path, pbar: tqdm) -> None:
+    def process_file(self, file_path: Path, pbar: tqdm, progress_callback=None) -> None:
         """
         Process a single file through the pipeline.
 
         Args:
             file_path: Path to file
             pbar: Progress bar to update
+            progress_callback: Optional callback(stage, progress) for progress updates
         """
         file_size = file_path.stat().st_size
         self.stats.total_bytes += file_size
@@ -292,6 +294,8 @@ class RagifyPipeline:
 
         # 2. Extract text and metadata
         pbar.set_postfix_str(f"Extracting: {file_path.name}")
+        if progress_callback:
+            progress_callback("extracting", 0.2)
         text, metadata = extract_file_content(file_path)
 
         if not text:
@@ -314,6 +318,8 @@ class RagifyPipeline:
 
         # 4. Chunk text (type-specific if implemented)
         pbar.set_postfix_str(f"Chunking: {file_path.name}")
+        if progress_callback:
+            progress_callback("chunking", 0.4)
         chunks = self.chunk_by_type(cleaned, file_path)
 
         if not chunks:
@@ -325,6 +331,8 @@ class RagifyPipeline:
 
         # 5. Generate embeddings
         pbar.set_postfix_str(f"Embedding: {file_path.name} ({len(chunks)} chunks)")
+        if progress_callback:
+            progress_callback("embedding", 0.6)
         embedded_chunks = batch_embed_chunks(chunks, max_tokens=self.config.chunking.max_tokens)
 
         if not embedded_chunks:
@@ -349,6 +357,8 @@ class RagifyPipeline:
 
         # 7. Upload to Qdrant
         pbar.set_postfix_str(f"Uploading: {file_path.name}")
+        if progress_callback:
+            progress_callback("uploading", 0.8)
         from lib.qdrant_operations import upload_points
 
         success = True

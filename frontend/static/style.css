@@ -615,6 +615,30 @@ body {
     border: 1px solid var(--red);
 }
 
+/* Pipeline stages */
+.job-initializing .job-badge,
+.job-extracting .job-badge {
+    background: rgba(255,179,71,0.2);
+    color: var(--amber);
+    border: 1px solid var(--amber);
+    animation: pulse 1s infinite;
+}
+
+.job-chunking .job-badge,
+.job-embedding .job-badge {
+    background: rgba(57,255,20,0.2);
+    color: var(--green);
+    border: 1px solid var(--green);
+    animation: pulse 1s infinite;
+}
+
+.job-uploading .job-badge {
+    background: rgba(57,255,20,0.3);
+    color: var(--green);
+    border: 1px solid var(--green);
+    animation: pulse 0.5s infinite;
+}
+
 @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.5; }

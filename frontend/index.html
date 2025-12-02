@@ -170,13 +170,13 @@
                 <h2>Active Operations</h2>
                 <div class="jobs-list">
                     <template x-for="job in jobs" :key="job.job_id">
-                        <div class="job-item" :class="'job-' + job.status">
+                        <div class="job-item" :class="'job-' + (job.stage || job.status)">
                             <div class="job-info">
                                 <span class="job-filename" x-text="job.filename"></span>
                                 <span class="job-collection" x-text="job.collection"></span>
                             </div>
                             <div class="job-status">
-                                <span class="job-badge" x-text="job.status"></span>
+                                <span class="job-badge" x-text="job.stage || job.status"></span>
                                 <div class="progress-bar" x-show="job.status === 'running'">
                                     <div class="progress-fill" :style="'width: ' + (job.progress * 100) + '%'"></div>
                                 </div>

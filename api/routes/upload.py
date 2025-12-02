@@ -131,14 +131,21 @@ def run_indexing(job_id: str, collection_dir: Path, collection: str, filenames: 
 
         jobs[job_id]["progress"] = 0.2
         jobs[job_id]["message"] = f"Processing with {'Tika' if use_tika else 'text-only'} mode"
+        jobs[job_id]["stage"] = "initializing"
+
+        # Progress callback to update job stage
+        def update_progress(stage: str, progress: float):
+            jobs[job_id]["stage"] = stage
+            jobs[job_id]["progress"] = progress
 
         # Create and run pipeline
         pipeline = RagifyPipeline(config, use_tika=use_tika)
-        stats = pipeline.process_directory(collection_dir)
+        stats = pipeline.process_directory(collection_dir, progress_callback=update_progress)
 
         # Update job with results
         jobs[job_id]["progress"] = 1.0
         jobs[job_id]["status"] = "completed"
+        jobs[job_id]["stage"] = "completed"
         jobs[job_id]["message"] = (
             f"Indexed {stats['processed']}/{stats['processed'] + stats['failed']} files, "
             f"{stats['chunks']} chunks, {stats['skipped']} skipped"
@@ -158,6 +165,7 @@ def run_indexing(job_id: str, collection_dir: Path, collection: str, filenames: 
         logger.error(f"[{job_id}] Stack trace:\n{stack_trace}")
 
         jobs[job_id]["status"] = "failed"
+        jobs[job_id]["stage"] = "failed"
         jobs[job_id]["message"] = error_msg
         jobs[job_id]["completed_at"] = datetime.utcnow().isoformat()
 
@@ -206,6 +214,7 @@ async def upload_file(
     jobs[job_id] = {
         "job_id": job_id,
         "status": "pending",
+        "stage": "pending",
         "collection": collection,
         "filename": file.filename,
         "progress": 0.0,
@@ -279,6 +288,7 @@ async def upload_multiple_files(
     jobs[job_id] = {
         "job_id": job_id,
         "status": "pending",
+        "stage": "pending",
         "collection": collection,
         "filename": f"{len(saved_files)} files",
         "progress": 0.0,

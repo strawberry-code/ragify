@@ -7,6 +7,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Added
+- Progress bar now shows processing stages (extracting, chunking, embedding, uploading) in real-time
+
 ### Changed
 - Batch embedding using Ollama /api/embed endpoint, reducing API calls from N to N/10 for faster uploads
 
