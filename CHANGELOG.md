@@ -7,6 +7,8 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.1.0] - 2025-12-02
+
 ### Added
 - Pre-download Tika JAR in Dockerfile.tika for PDF support on first boot
 - Claude Code slash commands: `/commit`, `/build`, `/push-ghcr`, `/release`
