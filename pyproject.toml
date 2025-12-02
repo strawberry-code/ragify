@@ -26,9 +26,9 @@ dependencies = [
 ragify-mcp = "ragify_mcp:main"
 
 [project.urls]
-Homepage = "https://github.com/strawberry-code/self-hosted-llm-rag"
-Repository = "https://github.com/strawberry-code/self-hosted-llm-rag"
-Documentation = "https://github.com/strawberry-code/self-hosted-llm-rag/blob/main/docs/MCP_SETUP.md"
+Homepage = "https://github.com/strawberry-code/ragify"
+Repository = "https://github.com/strawberry-code/ragify"
+Documentation = "https://github.com/strawberry-code/ragify/blob/main/docs/MCP_SETUP.md"
 
 [build-system]
 requires = ["hatchling"]

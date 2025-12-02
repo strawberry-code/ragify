@@ -136,7 +136,7 @@ Docker:
   ghcr.io/strawberry-code/ragify:latest-tika
 
 GitHub Release:
-  https://github.com/strawberry-code/self-hosted-llm-rag/releases/tag/v1.1.0
+  https://github.com/strawberry-code/ragify/releases/tag/v1.1.0
 
 Deploy:
   docker pull ghcr.io/strawberry-code/ragify:latest-tika

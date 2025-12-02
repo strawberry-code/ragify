@@ -5,7 +5,7 @@ Technical documentation for contributors and developers.
 ## Project Structure
 
 ```
-self-hosted-llm-rag/
+ragify/
 ├── ragify.py                 # Main CLI entry point
 ├── mcp_server.py             # MCP server entry point
 ├── config.yaml               # Default configuration
@@ -68,8 +68,8 @@ self-hosted-llm-rag/
 
 ```bash
 # 1. Clone and setup
-git clone https://github.com/strawberry-code/self-hosted-llm-rag.git
-cd self-hosted-llm-rag
+git clone https://github.com/strawberry-code/ragify.git
+cd ragify
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt

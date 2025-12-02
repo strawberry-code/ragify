@@ -58,7 +58,7 @@ Add to your MCP client config (Claude Desktop or Claude Code):
 
 ## Part of Ragify
 
-This MCP server is part of the [Ragify](https://github.com/strawberry-code/self-hosted-llm-rag) project - a self-hosted RAG system for indexing and querying documentation.
+This MCP server is part of the [Ragify](https://github.com/strawberry-code/ragify) project - a self-hosted RAG system for indexing and querying documentation.
 
 ## License
 

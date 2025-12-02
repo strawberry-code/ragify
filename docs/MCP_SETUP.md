@@ -64,7 +64,7 @@ Add to your MCP config:
   "mcpServers": {
     "ragify": {
       "command": "uvx",
-      "args": ["--from", "/path/to/self-hosted-llm-rag", "ragify-mcp"],
+      "args": ["--from", "/path/to/ragify", "ragify-mcp"],
       "env": {
         "QDRANT_URL": "http://127.0.0.1:6333",
         "OLLAMA_URL": "http://localhost:11434"
@@ -74,7 +74,7 @@ Add to your MCP config:
 }
 ```
 
-Replace `/path/to/self-hosted-llm-rag` with your actual path.
+Replace `/path/to/ragify` with your actual path.
 
 ### Available Tools
 
