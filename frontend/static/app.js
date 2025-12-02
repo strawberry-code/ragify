@@ -64,7 +64,7 @@ function ragifyApp() {
         // Collections
         async loadCollections() {
             try {
-                const res = await fetch('/api/collections');
+                const res = await fetch('/api/collections', { credentials: 'include' });
                 const data = await res.json();
                 console.log('API response:', data);
                 this.collections = data.collections || [];
@@ -99,7 +99,8 @@ function ragifyApp() {
                 const res = await fetch('/api/collections', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: this.newCollectionName })
+                    body: JSON.stringify({ name: this.newCollectionName }),
+                    credentials: 'include'
                 });
 
                 if (res.ok) {
@@ -120,7 +121,7 @@ function ragifyApp() {
             if (!confirm(`Delete collection "${name}"? This cannot be undone.`)) return;
 
             try {
-                const res = await fetch(`/api/collections/${name}`, { method: 'DELETE' });
+                const res = await fetch(`/api/collections/${name}`, { method: 'DELETE', credentials: 'include' });
                 if (res.ok) {
                     this.showToast('Collection deleted', 'success');
                     await this.loadCollections();
@@ -146,7 +147,7 @@ function ragifyApp() {
         // Jobs
         async loadJobs() {
             try {
-                const res = await fetch('/api/jobs?limit=10');
+                const res = await fetch('/api/jobs?limit=10', { credentials: 'include' });
                 const data = await res.json();
                 this.jobs = data.jobs || [];
             } catch (e) {
@@ -189,7 +190,8 @@ function ragifyApp() {
 
                     const res = await fetch('/api/upload', {
                         method: 'POST',
-                        body: formData
+                        body: formData,
+                        credentials: 'include'
                     });
 
                     if (res.ok) {
@@ -222,7 +224,8 @@ function ragifyApp() {
                         query: this.searchQuery,
                         collection: this.searchCollection,
                         limit: 10
-                    })
+                    }),
+                    credentials: 'include'
                 });
 
                 if (res.ok) {

@@ -212,13 +212,13 @@ def _fallback_chunk(
     return final_chunks
 
 
-def validate_chunk_size(chunk_text: str, max_tokens: int = 8192) -> bool:
+def validate_chunk_size(chunk_text: str, max_tokens: int = 2048) -> bool:
     """
     Validate that chunk doesn't exceed embedding model's token limit.
-    
+
     Args:
         chunk_text: Chunk text to validate
-        max_tokens: Maximum allowed tokens (nomic-embed-text: 8192)
+        max_tokens: Maximum allowed tokens (nomic-embed-text: 2048)
         
     Returns:
         True if chunk is within limits
@@ -232,7 +232,7 @@ def create_chunks(
     chunk_size: int = 500,
     chunk_overlap: int = 50,
     min_tokens: int = 0,
-    max_tokens: int = 8192
+    max_tokens: int = 2048
 ) -> list[dict]:
     """
     Create chunks from text using two-level semantic chunking (chonkie + semchunk).
@@ -247,7 +247,7 @@ def create_chunks(
         chunk_size: Target chunk size in tokens (default: 500)
         chunk_overlap: Overlap between chunks in tokens (default: 50)
         min_tokens: Minimum chunk size to keep (default: 50)
-        max_tokens: Maximum chunk size before re-chunking (default: 8192)
+        max_tokens: Maximum chunk size before re-chunking (default: 2048)
 
     Returns:
         List of chunk dictionaries with text and metadata

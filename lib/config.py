@@ -39,7 +39,7 @@ class ChunkingConfig(BaseModel):
     strategies: ChunkingStrategyConfig = Field(default_factory=ChunkingStrategyConfig)
     chunk_size: int = Field(default=512, description="Target chunk size in tokens")
     overlap: int = Field(default=50, description="Overlap between chunks in tokens")
-    max_tokens: int = Field(default=8192, description="Maximum tokens per chunk")
+    max_tokens: int = Field(default=2048, description="Maximum tokens per chunk (nomic-embed-text limit)")
 
 
 class EmbeddingConfig(BaseModel):
@@ -266,7 +266,7 @@ chunking:
     default: semantic
   chunk_size: 512
   overlap: 50
-  max_tokens: 8192
+  max_tokens: 2048
 
 embedding:
   provider: ollama

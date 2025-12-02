@@ -7,6 +7,10 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+- Frontend API calls now include credentials for proper session authentication
+- Ollama context size reduced from 8192 to 2048 to match nomic-embed-text model limit
+
 ## [1.1.2] - 2025-12-02
 
 ### Changed

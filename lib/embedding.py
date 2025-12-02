@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://localhost:11434')
 EMBEDDING_MODEL = "nomic-embed-text"
-MAX_TOKENS = 8192  # nomic-embed-text limit
+MAX_TOKENS = 2048  # nomic-embed-text context limit
 
 
 def get_embedding(text: str, timeout: int = 60, max_retries: int = 3) -> Optional[list[float]]:
@@ -46,7 +46,8 @@ def get_embedding(text: str, timeout: int = 60, max_retries: int = 3) -> Optiona
                 f"{OLLAMA_URL}/api/embeddings",
                 json={
                     "model": EMBEDDING_MODEL,
-                    "prompt": text
+                    "prompt": text,
+                    "options": {"num_ctx": MAX_TOKENS}
                 },
                 timeout=timeout
             )
