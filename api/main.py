@@ -25,6 +25,8 @@ sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure'
 # Silence verbose HTTP client logs (httpx logs every single request)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
+# Silence Tika startup warnings ("Failed to see startup log message; retrying...")
+logging.getLogger("tika").setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
 
