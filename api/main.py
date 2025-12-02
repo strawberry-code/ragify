@@ -22,6 +22,10 @@ logging.basicConfig(
 # Disable buffering for real-time logs
 sys.stdout.reconfigure(line_buffering=True) if hasattr(sys.stdout, 'reconfigure') else None
 
+# Silence verbose HTTP client logs (httpx logs every single request)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("httpcore").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
 from fastapi import FastAPI, Request

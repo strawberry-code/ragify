@@ -7,6 +7,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+- Silenced verbose httpx/httpcore logs that spammed 60+ lines per file upload
+
 ## [1.1.4] - 2025-12-02
 
 ### Added
