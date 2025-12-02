@@ -7,6 +7,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Changed
+- Batch embedding using Ollama /api/embed endpoint, reducing API calls from N to N/10 for faster uploads
+
 ### Fixed
 - Silenced verbose httpx/httpcore logs that spammed 60+ lines per file upload
 

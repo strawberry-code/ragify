@@ -22,24 +22,24 @@ MAX_TOKENS = 2048  # nomic-embed-text context limit
 def get_embedding(text: str, timeout: int = 60, max_retries: int = 3) -> Optional[list[float]]:
     """
     Generate embedding using Ollama with retry logic.
-    
+
     Args:
         text: Text to embed
         timeout: Request timeout in seconds
         max_retries: Maximum retry attempts on failure
-        
+
     Returns:
         Embedding vector or None if failed
     """
     if not text or len(text.strip()) == 0:
         logger.warning("Empty text provided for embedding")
         return None
-    
+
     token_count = count_tokens(text)
     if token_count > MAX_TOKENS:
         logger.error(f"Text too long for embedding: {token_count} > {MAX_TOKENS} tokens")
         return None
-    
+
     for attempt in range(max_retries):
         try:
             response = requests.post(
@@ -88,8 +88,85 @@ def get_embedding(text: str, timeout: int = 60, max_retries: int = 3) -> Optiona
         except Exception as e:
             logger.error(f"Embedding generation failed: {e}")
             return None
-    
+
     logger.error(f"Failed to generate embedding after {max_retries} attempts")
+    return None
+
+
+def get_embeddings_batch(
+    texts: list[str],
+    timeout: int = 120,
+    max_retries: int = 3
+) -> Optional[list[list[float]]]:
+    """
+    Generate embeddings for multiple texts in a single API call using Ollama's /api/embed endpoint.
+
+    Args:
+        texts: List of texts to embed
+        timeout: Request timeout in seconds
+        max_retries: Maximum retry attempts on failure
+
+    Returns:
+        List of embedding vectors (same order as input) or None if failed
+    """
+    if not texts:
+        return []
+
+    # Filter empty texts
+    valid_texts = [t for t in texts if t and len(t.strip()) > 0]
+    if not valid_texts:
+        logger.warning("All texts empty for batch embedding")
+        return None
+
+    for attempt in range(max_retries):
+        try:
+            response = requests.post(
+                f"{OLLAMA_URL}/api/embed",
+                json={
+                    "model": EMBEDDING_MODEL,
+                    "input": valid_texts
+                },
+                timeout=timeout
+            )
+            response.raise_for_status()
+            result = response.json()
+
+            if "embeddings" not in result:
+                logger.error(f"No embeddings in batch response: {result}")
+                return None
+
+            return result["embeddings"]
+
+        except requests.exceptions.Timeout:
+            logger.warning(f"Batch embedding timeout (attempt {attempt+1}/{max_retries}), retrying...")
+            time.sleep(2 ** attempt)
+            continue
+
+        except requests.exceptions.ConnectionError:
+            logger.warning(f"Connection error (attempt {attempt+1}/{max_retries}), retrying...")
+            if attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+            continue
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                wait = int(e.response.headers.get('Retry-After', '5'))
+                logger.warning(f"Rate limited, waiting {wait}s (attempt {attempt+1}/{max_retries})")
+                time.sleep(wait)
+                continue
+            elif e.response.status_code == 500:
+                logger.warning(f"Ollama 500 error (attempt {attempt+1}/{max_retries}), retrying...")
+                time.sleep(2 ** attempt)
+                continue
+            else:
+                logger.error(f"HTTP error from Ollama: {e.response.status_code} - {e.response.text[:200]}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Batch embedding generation failed: {e}")
+            return None
+
+    logger.error(f"Failed to generate batch embeddings after {max_retries} attempts")
     return None
 
 
@@ -161,39 +238,78 @@ def safe_embed_chunk(
 
 def batch_embed_chunks(
     chunks: list[dict],
-    max_tokens: int = MAX_TOKENS
+    max_tokens: int = MAX_TOKENS,
+    batch_size: int = 10
 ) -> list[dict]:
     """
-    Embed multiple chunks with progress tracking.
-    
+    Embed multiple chunks using batch API for better performance.
+
+    Uses Ollama's /api/embed endpoint to embed multiple texts in a single request,
+    reducing API calls from N to N/batch_size.
+
     Args:
-        chunks: List of chunk dictionaries
+        chunks: List of chunk dictionaries with 'text' key
         max_tokens: Maximum tokens per chunk
-        
+        batch_size: Number of texts to embed in a single API call
+
     Returns:
         List of successfully embedded chunks (flattened if re-chunking occurred)
     """
+    if not chunks:
+        return []
+
+    # First pass: validate and prepare chunks, handle oversized ones
+    valid_chunks = []
+    for chunk in chunks:
+        text = chunk.get('text', '')
+        if not text or len(text.strip()) == 0:
+            continue
+
+        token_count = count_tokens(text)
+        if token_count > max_tokens:
+            # Re-chunk oversized chunk
+            logger.info(f"Re-chunking oversized chunk ({token_count} tokens)")
+            from .chunking import fine_chunk_text
+            sub_chunks = fine_chunk_text([text], target_tokens=max_tokens // 2, overlap_tokens=50)
+            valid_chunks.extend(sub_chunks)
+        else:
+            valid_chunks.append(chunk)
+
+    if not valid_chunks:
+        logger.warning("No valid chunks to embed")
+        return []
+
+    # Second pass: batch embed
     embedded_chunks = []
     failed_count = 0
-    
-    for i, chunk in enumerate(chunks):
-        if i % 10 == 0:
-            logger.info(f"Embedding progress: {i}/{len(chunks)}")
-        
-        result = safe_embed_chunk(chunk, max_tokens)
-        
-        if result is None:
-            failed_count += 1
-            continue
-        
-        # Handle both single chunk and list of re-chunked chunks
-        if isinstance(result, list):
-            embedded_chunks.extend(result)
+
+    for i in range(0, len(valid_chunks), batch_size):
+        batch = valid_chunks[i:i + batch_size]
+        texts = [c.get('text', '') for c in batch]
+
+        logger.info(f"Embedding batch {i // batch_size + 1}/{(len(valid_chunks) + batch_size - 1) // batch_size} ({len(batch)} chunks)")
+
+        embeddings = get_embeddings_batch(texts)
+
+        if embeddings is None:
+            # Fallback to single embedding if batch fails
+            logger.warning("Batch embedding failed, falling back to single embedding")
+            for chunk in batch:
+                embedding = get_embedding(chunk.get('text', ''))
+                if embedding:
+                    chunk['embedding'] = embedding
+                    chunk['embedding_model'] = EMBEDDING_MODEL
+                    embedded_chunks.append(chunk)
+                else:
+                    failed_count += 1
         else:
-            embedded_chunks.append(result)
-    
+            for chunk, embedding in zip(batch, embeddings):
+                chunk['embedding'] = embedding
+                chunk['embedding_model'] = EMBEDDING_MODEL
+                embedded_chunks.append(chunk)
+
     if failed_count > 0:
-        logger.warning(f"Failed to embed {failed_count}/{len(chunks)} chunks")
-    
+        logger.warning(f"Failed to embed {failed_count}/{len(valid_chunks)} chunks")
+
     logger.info(f"Successfully embedded {len(embedded_chunks)} chunks")
     return embedded_chunks
