@@ -7,6 +7,9 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+### Fixed
+- Dockerfile.tika Tika pre-download script now uses heredoc for proper Python syntax
+
 ## [1.1.3] - 2025-12-02
 
 ### Fixed

@@ -83,22 +83,27 @@ RUN ollama serve & \
     pkill ollama || true
 
 # Pre-download Tika JAR and ensure it's in the expected location
-RUN python3 -c "\
-import os, shutil; \
-from tika import parser, tika; \
-# Trigger download \
-parser.from_buffer(b'test', xmlContent=False); \
-# Get the actual JAR path \
-jar_path = getattr(tika, 'TikaJarPath', None); \
-print(f'Tika JAR downloaded to: {jar_path}'); \
-# Copy to expected location if different \
-if jar_path and os.path.exists(jar_path) and jar_path != '/tmp/tika-server.jar': \
-    shutil.copy2(jar_path, '/tmp/tika-server.jar'); \
-    print('Copied to /tmp/tika-server.jar'); \
-# Verify \
-assert os.path.exists('/tmp/tika-server.jar'), 'Tika JAR not found at /tmp/tika-server.jar'; \
-print('Tika JAR verified at /tmp/tika-server.jar'); \
-" || echo "WARNING: Tika JAR pre-download failed, will download at runtime"
+RUN python3 <<'PYEOF'
+import os
+import shutil
+from tika import parser, tika
+
+# Trigger download
+parser.from_buffer(b'test', xmlContent=False)
+
+# Get the actual JAR path
+jar_path = getattr(tika, 'TikaJarPath', None)
+print(f'Tika JAR downloaded to: {jar_path}')
+
+# Copy to expected location if different
+if jar_path and os.path.exists(jar_path) and jar_path != '/tmp/tika-server.jar':
+    shutil.copy2(jar_path, '/tmp/tika-server.jar')
+    print('Copied to /tmp/tika-server.jar')
+
+# Verify
+assert os.path.exists('/tmp/tika-server.jar'), 'Tika JAR not found at /tmp/tika-server.jar'
+print('Tika JAR verified at /tmp/tika-server.jar')
+PYEOF
 
 # Create data directory for Qdrant
 RUN mkdir -p /data/qdrant
