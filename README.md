@@ -3,6 +3,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Container](https://img.shields.io/badge/Container-GHCR-blue.svg)](https://ghcr.io/strawberry-code/ragify)
 
+![Ragify Dashboard](assets/dashboard.png)
+
 All-in-one container for semantic document search. Index your docs, search with AI embeddings.
 
 **Includes:** Ollama + nomic-embed-text, Qdrant vector DB, REST API, Web UI, MCP server.
