@@ -10,6 +10,7 @@ import time
 import uuid
 import logging
 import traceback
+import zipfile
 from pathlib import Path
 from typing import Optional, List
 from datetime import datetime
@@ -310,6 +311,180 @@ async def upload_multiple_files(
         job_id=job_id,
         status="pending",
         message=f"Uploaded {len(saved_files)} files to collection '{collection}', indexing started"
+    )
+
+
+def run_zip_indexing(job_id: str, zip_path: Path, collection_dir: Path, collection: str):
+    """
+    Extract ZIP and run indexing pipeline.
+
+    Args:
+        job_id: Job identifier for tracking
+        zip_path: Path to uploaded ZIP file
+        collection_dir: Target directory for extracted files
+        collection: Target collection name
+    """
+    logger.info(f"[{job_id}] Starting ZIP extraction from {zip_path}")
+
+    try:
+        jobs[job_id]["status"] = "running"
+        jobs[job_id]["stage"] = "extracting_zip"
+        jobs[job_id]["message"] = "Extracting ZIP archive"
+        jobs[job_id]["progress"] = 0.05
+
+        # Extract ZIP, filtering out macOS metadata and hidden files
+        extracted_files = []
+        with zipfile.ZipFile(zip_path, 'r') as zf:
+            for name in zf.namelist():
+                # Skip macOS metadata, hidden files, and directories
+                if name.startswith('__MACOSX') or name.startswith('.') or name.endswith('/'):
+                    continue
+                # Skip nested hidden files (e.g., folder/.hidden)
+                if '/.' in name:
+                    continue
+
+                zf.extract(name, collection_dir)
+                extracted_files.append(name)
+
+        # Remove ZIP after extraction
+        zip_path.unlink()
+
+        logger.info(f"[{job_id}] Extracted {len(extracted_files)} files from ZIP")
+        jobs[job_id]["message"] = f"Extracted {len(extracted_files)} files"
+        jobs[job_id]["progress"] = 0.15
+        jobs[job_id]["filename"] = f"{len(extracted_files)} files"
+
+        if not extracted_files:
+            jobs[job_id]["status"] = "completed"
+            jobs[job_id]["stage"] = "completed"
+            jobs[job_id]["message"] = "ZIP was empty or contained only hidden files"
+            jobs[job_id]["completed_at"] = datetime.utcnow().isoformat()
+            return
+
+        # Import RagifyPipeline
+        from ragify import RagifyPipeline
+        from lib.config import RagifyConfig
+        from lib.tika_check import check_tika_available
+
+        # Configure
+        config = RagifyConfig.default()
+        config.qdrant.collection = collection
+
+        # Check Tika availability
+        tika_status = check_tika_available()
+        use_tika = tika_status['can_use_tika']
+        logger.info(f"[{job_id}] Tika available: {use_tika}")
+
+        # Progress callback
+        def update_progress(stage: str, progress: float):
+            # Scale progress: extraction was 0-0.15, pipeline is 0.15-1.0
+            scaled_progress = 0.15 + (progress * 0.85)
+            jobs[job_id]["stage"] = stage
+            jobs[job_id]["progress"] = scaled_progress
+
+        # Run pipeline
+        pipeline = RagifyPipeline(config, use_tika=use_tika)
+        stats = pipeline.process_directory(collection_dir, progress_callback=update_progress)
+
+        # Update job with results
+        jobs[job_id]["progress"] = 1.0
+        jobs[job_id]["status"] = "completed"
+        jobs[job_id]["stage"] = "completed"
+        jobs[job_id]["message"] = (
+            f"Indexed {stats['processed']}/{stats['processed'] + stats['failed']} files, "
+            f"{stats['chunks']} chunks"
+        )
+        jobs[job_id]["completed_at"] = datetime.utcnow().isoformat()
+
+        logger.info(f"[{job_id}] ZIP indexing COMPLETED: {stats['processed']} files, {stats['chunks']} chunks")
+
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"[{job_id}] ZIP indexing FAILED: {error_msg}")
+        logger.error(f"[{job_id}] Stack trace:\n{traceback.format_exc()}")
+
+        # Cleanup ZIP if still exists
+        if zip_path.exists():
+            try:
+                zip_path.unlink()
+            except Exception:
+                pass
+
+        jobs[job_id]["status"] = "failed"
+        jobs[job_id]["stage"] = "failed"
+        jobs[job_id]["message"] = error_msg
+        jobs[job_id]["completed_at"] = datetime.utcnow().isoformat()
+
+
+@router.post("/upload-zip")
+async def upload_zip(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    collection: str = Form(default="documentation")
+):
+    """
+    Upload a ZIP file for extraction and indexing.
+
+    The ZIP is extracted server-side, then all files are processed
+    by RagifyPipeline as a single job.
+
+    Args:
+        file: ZIP file to upload
+        collection: Target collection name
+
+    Returns:
+        dict: Job information
+    """
+    # Trigger cleanup
+    cleanup_old_files()
+
+    # Validate file
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No filename provided")
+
+    if not file.filename.endswith('.zip'):
+        raise HTTPException(status_code=400, detail="File must be a ZIP archive")
+
+    # Create collection directory
+    collection_dir = COLLECTIONS_DIR / collection
+    collection_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save ZIP temporarily with unique name
+    zip_path = collection_dir / f"_upload_{uuid.uuid4().hex}.zip"
+    try:
+        content = await file.read()
+        zip_path.write_bytes(content)
+        logger.info(f"Saved ZIP: {zip_path} ({len(content)} bytes)")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save ZIP: {e}")
+
+    # Create job record
+    job_id = str(uuid.uuid4())
+    jobs[job_id] = {
+        "job_id": job_id,
+        "status": "pending",
+        "stage": "pending",
+        "collection": collection,
+        "filename": "ZIP archive",
+        "progress": 0.0,
+        "message": "ZIP uploaded, extraction starting",
+        "created_at": datetime.utcnow().isoformat(),
+        "completed_at": None
+    }
+
+    # Start background processing
+    background_tasks.add_task(
+        run_zip_indexing,
+        job_id,
+        zip_path,
+        collection_dir,
+        collection
+    )
+
+    return JobCreate(
+        job_id=job_id,
+        status="pending",
+        message=f"ZIP uploaded to collection '{collection}', extraction and indexing started"
     )
 
 

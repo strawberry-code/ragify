@@ -538,6 +538,24 @@ body {
     color: var(--amber);
 }
 
+/* Local Upload Progress (browser-side zipping/uploading) */
+.upload-local-progress {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: var(--gauge-bg);
+    border: 2px solid var(--amber);
+    border-radius: 4px;
+}
+
+.upload-phase-label {
+    font-size: 0.85rem;
+    color: var(--amber);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    animation: pulse 1s infinite;
+}
+
 /* Jobs Panel - Full Width */
 .section.jobs-section {
     grid-column: 1 / -1;
@@ -617,7 +635,8 @@ body {
 
 /* Pipeline stages */
 .job-initializing .job-badge,
-.job-extracting .job-badge {
+.job-extracting .job-badge,
+.job-extracting_zip .job-badge {
     background: rgba(255,179,71,0.2);
     color: var(--amber);
     border: 1px solid var(--amber);

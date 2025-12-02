@@ -6,6 +6,7 @@
     <title>Ragify - Control Board</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" href="/static/favicon.svg">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -162,6 +163,14 @@
                         <span x-show="!uploading">Upload All</span>
                         <span x-show="uploading">Processing...</span>
                     </button>
+                </div>
+
+                <!-- Local Upload Progress (browser-side) -->
+                <div class="upload-local-progress" x-show="uploadPhase">
+                    <div class="upload-phase-label" x-text="uploadPhase === 'zipping' ? 'Zipping files...' : uploadPhase === 'uploading' ? 'Uploading...' : ''"></div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" :style="'width: ' + (uploadLocalProgress * 100) + '%'"></div>
+                    </div>
                 </div>
             </section>
 

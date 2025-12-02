@@ -25,6 +25,8 @@ function ragifyApp() {
         uploadQueue: [],
         uploading: false,
         dragOver: false,
+        uploadPhase: '', // 'zipping', 'uploading', ''
+        uploadLocalProgress: 0,
 
         // Search
         searchCollection: '',
@@ -180,36 +182,92 @@ function ragifyApp() {
 
         async startUpload() {
             if (this.uploadQueue.length === 0 || this.uploading) return;
-
             this.uploading = true;
 
-            for (const file of this.uploadQueue) {
-                try {
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    formData.append('collection', this.uploadCollection);
+            // Decide: ZIP if multiple files OR total size > 5MB
+            const totalSize = this.uploadQueue.reduce((sum, f) => sum + f.size, 0);
+            const shouldZip = this.uploadQueue.length > 1 || totalSize > 5 * 1024 * 1024;
 
-                    const res = await fetch('/api/upload', {
-                        method: 'POST',
-                        body: formData,
-                        credentials: 'include'
-                    });
-
-                    if (res.ok) {
-                        const data = await res.json();
-                        this.showToast(`Uploaded: ${file.name} (Job: ${data.job_id?.slice(0,8) || 'queued'})`, 'success');
-                    } else {
-                        const error = await res.json().catch(() => ({}));
-                        this.showToast(`Failed: ${file.name} - ${error.detail || res.statusText}`, 'error');
-                    }
-                } catch (e) {
-                    this.showToast(`Failed: ${file.name} - ${e.message || 'Network error'}`, 'error');
+            try {
+                if (shouldZip) {
+                    await this.uploadAsZip();
+                } else {
+                    await this.uploadSingleFile();
                 }
+            } catch (e) {
+                this.showToast(`Upload failed: ${e.message || 'Unknown error'}`, 'error');
             }
 
             this.uploadQueue = [];
             this.uploading = false;
+            this.uploadPhase = '';
+            this.uploadLocalProgress = 0;
             await this.loadJobs();
+        },
+
+        async uploadSingleFile() {
+            const file = this.uploadQueue[0];
+            this.uploadPhase = 'uploading';
+            this.uploadLocalProgress = 0;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('collection', this.uploadCollection);
+
+            const res = await fetch('/api/upload', {
+                method: 'POST',
+                body: formData,
+                credentials: 'include'
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                this.showToast(`Uploaded: ${file.name} (Job: ${data.job_id?.slice(0,8) || 'queued'})`, 'success');
+            } else {
+                const error = await res.json().catch(() => ({}));
+                throw new Error(error.detail || res.statusText);
+            }
+        },
+
+        async uploadAsZip() {
+            // Phase 1: Zipping
+            this.uploadPhase = 'zipping';
+            this.uploadLocalProgress = 0;
+
+            const zip = new JSZip();
+            for (const file of this.uploadQueue) {
+                zip.file(file.name, file);
+            }
+
+            const blob = await zip.generateAsync({
+                type: 'blob',
+                compression: 'DEFLATE',
+                compressionOptions: { level: 6 }
+            }, (meta) => {
+                this.uploadLocalProgress = meta.percent / 100;
+            });
+
+            // Phase 2: Uploading
+            this.uploadPhase = 'uploading';
+            this.uploadLocalProgress = 0;
+
+            const formData = new FormData();
+            formData.append('file', blob, 'upload.zip');
+            formData.append('collection', this.uploadCollection);
+
+            const res = await fetch('/api/upload-zip', {
+                method: 'POST',
+                body: formData,
+                credentials: 'include'
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                this.showToast(`Uploaded ${this.uploadQueue.length} files as ZIP (Job: ${data.job_id?.slice(0,8) || 'queued'})`, 'success');
+            } else {
+                const error = await res.json().catch(() => ({}));
+                throw new Error(error.detail || res.statusText);
+            }
         },
 
         // Search

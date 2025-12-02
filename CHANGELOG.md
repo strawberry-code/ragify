@@ -7,11 +7,17 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.2.0] - 2025-12-02
+
 ### Added
 - Progress bar now shows processing stages (extracting, chunking, embedding, uploading) in real-time
+- Client-side ZIP compression for multi-file uploads, reducing N HTTP requests to 1 and improving upload speed
+- New `/api/upload-zip` endpoint for server-side ZIP extraction and batch processing
+- Browser-side progress feedback: "Zipping..." and "Uploading..." phases before server processing
 
 ### Changed
 - Batch embedding using Ollama /api/embed endpoint, reducing API calls from N to N/10 for faster uploads
+- Multi-file uploads now automatically use ZIP compression (threshold: >1 file or >5MB total)
 
 ### Fixed
 - Silenced verbose httpx/httpcore logs that spammed 60+ lines per file upload
