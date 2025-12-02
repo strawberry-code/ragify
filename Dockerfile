@@ -62,7 +62,6 @@ COPY api/ ./api/
 COPY frontend/ ./frontend/
 COPY src/ ./src/
 COPY ragify.py .
-COPY mcp_server.py .
 COPY config.yaml .
 COPY docker/ ./docker/
 
