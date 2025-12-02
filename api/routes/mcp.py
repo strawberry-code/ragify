@@ -290,12 +290,12 @@ class MCPMessage(BaseModel):
 
 
 @router.get("/sse")
-async def mcp_sse(request: Request):
+async def mcp_sse_get(request: Request):
     """
-    SSE endpoint for MCP communication.
+    SSE endpoint for MCP communication (GET).
 
     Clients connect here to receive server-sent events.
-    Messages are sent via POST to /mcp/message.
+    Messages are sent via POST to /mcp/message or POST to /mcp/sse.
     """
     connection_id = str(uuid4())
     queue: asyncio.Queue = asyncio.Queue()
@@ -328,6 +328,30 @@ async def mcp_sse(request: Request):
             connections.pop(connection_id, None)
 
     return EventSourceResponse(event_generator())
+
+
+@router.post("/sse")
+async def mcp_sse_post(request: Request):
+    """
+    Streamable HTTP endpoint for MCP communication (POST).
+
+    Accepts MCP JSON-RPC messages and returns responses.
+    This is the Streamable HTTP transport used by Claude Code.
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        return {"jsonrpc": "2.0", "error": {"code": -32700, "message": "Parse error"}, "id": None}
+
+    # Handle single message or batch
+    if isinstance(body, list):
+        # Batch request
+        responses = [handle_mcp_message(msg) for msg in body]
+        return responses
+    else:
+        # Single request
+        response = handle_mcp_message(body)
+        return response
 
 
 @router.post("/message")
