@@ -124,7 +124,8 @@ def get_embeddings_batch(
                 f"{OLLAMA_URL}/api/embed",
                 json={
                     "model": EMBEDDING_MODEL,
-                    "input": valid_texts
+                    "input": valid_texts,
+                    "options": {"num_ctx": MAX_TOKENS}
                 },
                 timeout=timeout
             )

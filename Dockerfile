@@ -36,8 +36,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Ollama
-RUN curl -fsSL https://ollama.ai/install.sh | sh
+# Install Ollama - pinned to v0.11.0 to avoid embedding bugs in 0.12.x/0.13.x
+# See: https://github.com/ollama/ollama/issues/13054
+ENV OLLAMA_VERSION=0.11.0
+RUN ARCH=$(uname -m) && \
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then \
+        OLLAMA_ARCH="arm64"; \
+    else \
+        OLLAMA_ARCH="amd64"; \
+    fi && \
+    curl -fsSL "https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/ollama-linux-${OLLAMA_ARCH}.tgz" | \
+    tar -xz -C /usr/local && \
+    chmod +x /usr/local/bin/ollama
 
 # Install Qdrant (standalone binary - architecture aware)
 RUN ARCH=$(uname -m) && \

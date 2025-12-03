@@ -7,6 +7,13 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.2.3] - 2025-12-03
+
+### Fixed
+- Pinned Ollama to v0.11.0 in Dockerfiles to avoid embedding bugs in 0.12.x/0.13.x (see [ollama#13054](https://github.com/ollama/ollama/issues/13054))
+- Added missing `num_ctx` option to batch embedding API call (`/api/embed`)
+- Restored `max_tokens` in config.yaml to 2048 (nomic-embed-text context limit)
+
 ## [1.2.2] - 2025-12-03
 
 ### Added
