@@ -92,6 +92,8 @@ docker compose up -d
 | `BASE_URL` | `http://localhost:8080` | Public URL for OAuth callbacks |
 | `API_PORT` | `8080` | API and Web UI port |
 | `OLLAMA_MODEL` | `nomic-embed-text` | Embedding model |
+| `CHUNK_SIZE` | `400` | Target chunk size in tokens |
+| `CHUNK_MAX_TOKENS` | `1500` | Maximum chunk size (safe margin for nomic-embed-text 2048 limit) |
 
 ## Features
 

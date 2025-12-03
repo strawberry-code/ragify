@@ -5,10 +5,17 @@ Implements two-level chunking strategy for optimal RAG performance.
 """
 
 import logging
+import os
 from typing import Optional, TypedDict, List
 import tiktoken
 
 logger = logging.getLogger(__name__)
+
+# Chunking configuration from environment variables
+# CHUNK_SIZE: Target chunk size in tokens (default: 400)
+# CHUNK_MAX_TOKENS: Maximum chunk size before re-chunking (default: 1500, safe for nomic-embed-text 2048 limit)
+CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', '400'))
+CHUNK_MAX_TOKENS = int(os.getenv('CHUNK_MAX_TOKENS', '1500'))
 
 # Custom exception for chunking failures
 class ChunkingError(RuntimeError):
@@ -212,27 +219,29 @@ def _fallback_chunk(
     return final_chunks
 
 
-def validate_chunk_size(chunk_text: str, max_tokens: int = 2048) -> bool:
+def validate_chunk_size(chunk_text: str, max_tokens: int = None) -> bool:
     """
     Validate that chunk doesn't exceed embedding model's token limit.
 
     Args:
         chunk_text: Chunk text to validate
-        max_tokens: Maximum allowed tokens (nomic-embed-text: 2048)
+        max_tokens: Maximum allowed tokens (default: CHUNK_MAX_TOKENS env var or 1500)
         
     Returns:
         True if chunk is within limits
     """
+    if max_tokens is None:
+        max_tokens = CHUNK_MAX_TOKENS
     token_count = count_tokens(chunk_text)
     return token_count <= max_tokens
 
 
 def create_chunks(
     text: str,
-    chunk_size: int = 500,
+    chunk_size: int = None,
     chunk_overlap: int = 50,
     min_tokens: int = 0,
-    max_tokens: int = 2048
+    max_tokens: int = None
 ) -> list[dict]:
     """
     Create chunks from text using two-level semantic chunking (chonkie + semchunk).
@@ -244,14 +253,20 @@ def create_chunks(
 
     Args:
         text: Text to chunk
-        chunk_size: Target chunk size in tokens (default: 500)
+        chunk_size: Target chunk size in tokens (default: CHUNK_SIZE env var or 400)
         chunk_overlap: Overlap between chunks in tokens (default: 50)
-        min_tokens: Minimum chunk size to keep (default: 50)
-        max_tokens: Maximum chunk size before re-chunking (default: 2048)
+        min_tokens: Minimum chunk size to keep (default: 0)
+        max_tokens: Maximum chunk size before re-chunking (default: CHUNK_MAX_TOKENS env var or 1500)
 
     Returns:
         List of chunk dictionaries with text and metadata
     """
+    # Apply defaults from environment variables
+    if chunk_size is None:
+        chunk_size = CHUNK_SIZE
+    if max_tokens is None:
+        max_tokens = CHUNK_MAX_TOKENS
+
     if not text or len(text.strip()) == 0:
         return []
 
@@ -295,7 +310,7 @@ def create_chunks(
 def filter_chunks(
     chunks: list[dict],
     min_tokens: int = 0,
-    max_tokens: int = 8192
+    max_tokens: int = None
 ) -> list[dict]:
     """
     Filter chunks by token count.
@@ -303,13 +318,16 @@ def filter_chunks(
     Args:
         chunks: List of chunk dictionaries
         min_tokens: Minimum token count - 0 = keep all (default)
-        max_tokens: Maximum token count (needs re-chunking)
+        max_tokens: Maximum token count (default: CHUNK_MAX_TOKENS env var or 1500)
         
     Returns:
         Filtered list of valid chunks
     """
+    if max_tokens is None:
+        max_tokens = CHUNK_MAX_TOKENS
+
     valid_chunks = []
-    
+
     for chunk in chunks:
         token_count = chunk.get('token_count', count_tokens(chunk['text']))
         

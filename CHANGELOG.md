@@ -7,6 +7,14 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.2.2] - 2025-12-03
+
+### Added
+- Chunking parameters now configurable via environment variables: `CHUNK_SIZE` (default 400) and `CHUNK_MAX_TOKENS` (default 1500)
+
+### Fixed
+- Reduced default chunk size to prevent Ollama panic with nomic-embed-text model (2048 token context limit)
+
 ## [1.2.1] - 2025-12-02
 
 ### Fixed
