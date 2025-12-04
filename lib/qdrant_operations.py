@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 # Configuration
 QDRANT_URL = os.getenv('QDRANT_URL', 'http://localhost:6333')
 COLLECTION_NAME = "documentation"
-BATCH_SIZE = int(os.getenv('QDRANT_BATCH_SIZE', '10'))
+BATCH_SIZE = int(os.getenv('QDRANT_BATCH_SIZE', '100'))  # Increased from 10 for better throughput
 QDRANT_API_KEY = os.getenv('QDRANT_API_KEY')
 
 

@@ -390,47 +390,19 @@ class RagifyPipeline:
         Returns:
             List of chunk dictionaries
         """
-        # Determine chunking strategy based on file type
-        extension = file_path.suffix.lower()
-        strategies = self.config.chunking.strategies
+        # Use simplified single-pass chunking with semchunk
+        from lib.chunking import create_chunks
 
-        if extension in ['.md', '.markdown']:
-            strategy = strategies.markdown
-        elif extension in ['.py', '.js', '.java', '.cpp', '.go']:
-            strategy = strategies.code
-        elif extension == '.pdf':
-            strategy = strategies.pdf
-        else:
-            strategy = strategies.default
-
-        # For now, use semantic chunking for all
-        # (type-specific implementations can be added later)
-        self.logger.debug(f"Using {strategy} strategy for {file_path.name}")
-
-        # Two-level chunking
-        macro_chunks = semantic_chunk_text(
+        chunks = create_chunks(
             text,
-            chunk_size=self.config.chunking.chunk_size * 2,
-            chunk_overlap=self.config.chunking.overlap
-        )
-
-        if not macro_chunks:
-            return []
-
-        fine_chunks = fine_chunk_text(
-            macro_chunks,
-            target_tokens=self.config.chunking.chunk_size,
-            overlap_tokens=self.config.chunking.overlap
-        )
-
-        # Filter and validate chunks
-        valid_chunks = filter_chunks(
-            fine_chunks,
+            chunk_size=self.config.chunking.chunk_size,
+            chunk_overlap=self.config.chunking.overlap,
             min_tokens=50,
             max_tokens=self.config.chunking.max_tokens
         )
 
-        return valid_chunks
+        self.logger.debug(f"Created {len(chunks)} chunks for {file_path.name}")
+        return chunks
 
     def generate_report(self) -> None:
         """Generate and save processing report."""

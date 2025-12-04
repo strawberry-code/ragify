@@ -2,6 +2,7 @@
 
 import os
 import warnings
+from functools import lru_cache
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException
@@ -17,6 +18,7 @@ router = APIRouter()
 QDRANT_URL = os.getenv('QDRANT_URL', 'http://localhost:6333')
 QDRANT_API_KEY = os.getenv('QDRANT_API_KEY')
 OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://localhost:11434')
+EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'nomic-embed-text')
 
 
 def get_qdrant_client() -> QdrantClient:
@@ -26,20 +28,32 @@ def get_qdrant_client() -> QdrantClient:
     return QdrantClient(url=QDRANT_URL)
 
 
-def get_embedding(text: str, model: str = "nomic-embed-text", timeout: int = 30) -> list[float] | None:
-    """Generate embedding using Ollama."""
+@lru_cache(maxsize=1000)
+def _cached_embedding(text: str, model: str) -> tuple[float, ...] | None:
+    """Generate embedding with LRU cache (returns tuple for hashability)."""
     import requests
 
     try:
         response = requests.post(
             f"{OLLAMA_URL}/api/embeddings",
             json={"model": model, "prompt": text},
-            timeout=timeout
+            timeout=30
         )
         response.raise_for_status()
-        return response.json().get("embedding")
+        embedding = response.json().get("embedding")
+        return tuple(embedding) if embedding else None
     except Exception:
         return None
+
+
+def get_embedding(text: str, model: str = None, timeout: int = 30) -> list[float] | None:
+    """Generate embedding using Ollama with caching."""
+    if model is None:
+        model = EMBEDDING_MODEL
+
+    # Use cached version (returns tuple, convert back to list)
+    result = _cached_embedding(text, model)
+    return list(result) if result else None
 
 
 class SearchRequest(BaseModel):

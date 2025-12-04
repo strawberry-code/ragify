@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 # Configuration
 OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://localhost:11434')
-EMBEDDING_MODEL = "nomic-embed-text"
-MAX_TOKENS = 2048  # nomic-embed-text context limit
+EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'nomic-embed-text')
+MAX_TOKENS = 2048  # nomic-embed-text context limit (configurable models may differ)
 
 
 def get_embedding(text: str, timeout: int = 60, max_retries: int = 3) -> Optional[list[float]]:
@@ -240,7 +240,7 @@ def safe_embed_chunk(
 def batch_embed_chunks(
     chunks: list[dict],
     max_tokens: int = MAX_TOKENS,
-    batch_size: int = 10
+    batch_size: int = 32
 ) -> list[dict]:
     """
     Embed multiple chunks using batch API for better performance.
@@ -251,7 +251,7 @@ def batch_embed_chunks(
     Args:
         chunks: List of chunk dictionaries with 'text' key
         max_tokens: Maximum tokens per chunk
-        batch_size: Number of texts to embed in a single API call
+        batch_size: Number of texts to embed in a single API call (default: 32)
 
     Returns:
         List of successfully embedded chunks (flattened if re-chunking occurred)
@@ -266,12 +266,17 @@ def batch_embed_chunks(
         if not text or len(text.strip()) == 0:
             continue
 
-        token_count = count_tokens(text)
+        # Use cached token_count if available
+        token_count = chunk.get('token_count')
+        if token_count is None:
+            token_count = count_tokens(text)
+            chunk['token_count'] = token_count
+
         if token_count > max_tokens:
             # Re-chunk oversized chunk
             logger.info(f"Re-chunking oversized chunk ({token_count} tokens)")
-            from .chunking import fine_chunk_text
-            sub_chunks = fine_chunk_text([text], target_tokens=max_tokens // 2, overlap_tokens=50)
+            from .chunking import semchunk_text
+            sub_chunks = semchunk_text(text, target_tokens=max_tokens // 2, overlap_tokens=50)
             valid_chunks.extend(sub_chunks)
         else:
             valid_chunks.append(chunk)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Semantic chunking utilities using Chonkie and semchunk.
-Implements two-level chunking strategy for optimal RAG performance.
+Semantic chunking utilities using semchunk.
+Simplified single-pass chunking for optimal RAG performance.
 """
 
 import logging
@@ -12,9 +12,9 @@ import tiktoken
 logger = logging.getLogger(__name__)
 
 # Chunking configuration from environment variables
-# CHUNK_SIZE: Target chunk size in tokens (default: 400)
+# CHUNK_SIZE: Target chunk size in tokens (default: 512)
 # CHUNK_MAX_TOKENS: Maximum chunk size before re-chunking (default: 1500, safe for nomic-embed-text 2048 limit)
-CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', '400'))
+CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', '512'))
 CHUNK_MAX_TOKENS = int(os.getenv('CHUNK_MAX_TOKENS', '1500'))
 
 # Custom exception for chunking failures
@@ -23,22 +23,34 @@ class ChunkingError(RuntimeError):
     pass
 
 
+# Global tiktoken encoding cache for performance
+_TIKTOKEN_ENC = None
+
+
+def _get_tiktoken_encoding(encoding_name: str = "cl100k_base"):
+    """Get cached tiktoken encoding for performance."""
+    global _TIKTOKEN_ENC
+    if _TIKTOKEN_ENC is None:
+        _TIKTOKEN_ENC = tiktoken.get_encoding(encoding_name)
+    return _TIKTOKEN_ENC
+
+
 def count_tokens(text: str, encoding_name: str = "cl100k_base") -> int:
     """
-    Count tokens in text using tiktoken.
-    
+    Count tokens in text using tiktoken (cached).
+
     Args:
         text: Text to count tokens for
         encoding_name: Tiktoken encoding name
-        
+
     Returns:
         Number of tokens
     """
     try:
-        enc = tiktoken.get_encoding(encoding_name)
+        enc = _get_tiktoken_encoding(encoding_name)
         return len(enc.encode(text))
     except Exception as e:
-        logger.warning(f"Token counting failed: {e}, using word‑based fallback")
+        logger.warning(f"Token counting failed: {e}, using word-based fallback")
         # Fallback: approximate 1 token ≈ 1 word
         return len(text.split())
 
@@ -179,6 +191,63 @@ def fine_chunk_text(
         raise ChunkingError(str(e))
 
 
+def semchunk_text(
+    text: str,
+    target_tokens: int = 512,
+    overlap_tokens: int = 50
+) -> list[dict]:
+    """
+    Direct semantic chunking using semchunk.
+
+    Single-pass chunking that respects semantic boundaries.
+    Simpler and faster than two-level chunking.
+
+    Args:
+        text: Text to chunk
+        target_tokens: Target size for chunks (tokens)
+        overlap_tokens: Overlap between chunks (tokens)
+
+    Returns:
+        List of chunk dictionaries with metadata
+    """
+    if not text or len(text.strip()) == 0:
+        return []
+
+    try:
+        from semchunk import chunkerify
+
+        # Create chunker with cached tiktoken encoding
+        chunker = chunkerify("cl100k_base", chunk_size=target_tokens)
+
+        # Chunk the text directly
+        chunk_texts = chunker(text, overlap=overlap_tokens)
+
+        # Build chunk dictionaries with metadata
+        chunks = []
+        for idx, chunk_text in enumerate(chunk_texts):
+            if not chunk_text or len(chunk_text.strip()) == 0:
+                continue
+
+            token_count = count_tokens(chunk_text)
+            chunks.append({
+                'text': chunk_text,
+                'semantic_block_index': 0,  # Single block for direct chunking
+                'chunk_index': idx,
+                'token_count': token_count,
+                'chunking_method': 'semchunk'
+            })
+
+        logger.info(f"Semchunk created {len(chunks)} chunks from text")
+        return chunks
+
+    except ImportError as e:
+        logger.error("Semchunk not installed, cannot perform chunking")
+        raise ChunkingError("Semchunk not installed")
+    except Exception as e:
+        logger.warning(f"Semchunk failed: {e}")
+        raise ChunkingError(str(e))
+
+
 def _fallback_chunk(
     blocks: list[str],
     target_tokens: int,
@@ -244,16 +313,15 @@ def create_chunks(
     max_tokens: int = None
 ) -> list[dict]:
     """
-    Create chunks from text using two-level semantic chunking (chonkie + semchunk).
+    Create chunks from text using semantic chunking (semchunk only).
 
-    Pipeline:
-    1. Chonkie TokenChunker: creates macro-semantic blocks (2x target size)
-    2. Semchunk: refines into fine-grained embedding-ready chunks
-    3. Filter: removes too short/long chunks
+    Simplified pipeline:
+    1. Semchunk: creates embedding-ready chunks respecting semantic boundaries
+    2. Filter: removes too short/long chunks
 
     Args:
         text: Text to chunk
-        chunk_size: Target chunk size in tokens (default: CHUNK_SIZE env var or 400)
+        chunk_size: Target chunk size in tokens (default: CHUNK_SIZE env var or 512)
         chunk_overlap: Overlap between chunks in tokens (default: 50)
         min_tokens: Minimum chunk size to keep (default: 0)
         max_tokens: Maximum chunk size before re-chunking (default: CHUNK_MAX_TOKENS env var or 1500)
@@ -271,32 +339,26 @@ def create_chunks(
         return []
 
     try:
-        # Level 1: Chonkie semantic chunking (macro blocks)
-        macro_chunks = semantic_chunk_text(
+        # Direct semchunk - no need for two-level chunking
+        # Semchunk already handles semantic boundaries well
+        chunks = semchunk_text(
             text,
-            chunk_size=chunk_size * 2,  # Larger blocks first
-            chunk_overlap=chunk_overlap
-        )
-
-        if not macro_chunks:
-            logger.warning("No macro chunks created, using fallback")
-            return _fallback_chunk([text], chunk_size, chunk_overlap)
-
-        # Level 2: Semchunk fine-grained chunking
-        fine_chunks = fine_chunk_text(
-            macro_chunks,
             target_tokens=chunk_size,
             overlap_tokens=chunk_overlap
         )
 
-        # Level 3: Filter and validate
+        if not chunks:
+            logger.warning("No chunks created, using fallback")
+            return _fallback_chunk([text], chunk_size, chunk_overlap)
+
+        # Filter and validate
         valid_chunks = filter_chunks(
-            fine_chunks,
+            chunks,
             min_tokens=min_tokens,
             max_tokens=max_tokens
         )
 
-        logger.info(f"Created {len(valid_chunks)} chunks (chonkie+semchunk pipeline)")
+        logger.info(f"Created {len(valid_chunks)} chunks (semchunk pipeline)")
         return valid_chunks
 
     except ChunkingError as e:
@@ -319,7 +381,7 @@ def filter_chunks(
         chunks: List of chunk dictionaries
         min_tokens: Minimum token count - 0 = keep all (default)
         max_tokens: Maximum token count (default: CHUNK_MAX_TOKENS env var or 1500)
-        
+
     Returns:
         Filtered list of valid chunks
     """
@@ -329,7 +391,11 @@ def filter_chunks(
     valid_chunks = []
 
     for chunk in chunks:
-        token_count = chunk.get('token_count', count_tokens(chunk['text']))
+        # Use cached token_count if available, only count if missing
+        token_count = chunk.get('token_count')
+        if token_count is None:
+            token_count = count_tokens(chunk['text'])
+            chunk['token_count'] = token_count  # Cache for later use
         
         if token_count < min_tokens:
             logger.debug(f"Discarding too short chunk: {token_count} tokens")

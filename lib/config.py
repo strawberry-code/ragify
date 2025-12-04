@@ -24,19 +24,9 @@ class ExtractionConfig(BaseModel):
     max_file_size: int = Field(default=100 * 1024 * 1024, description="Maximum file size in bytes")
 
 
-class ChunkingStrategyConfig(BaseModel):
-    """Chunking strategies per file type."""
-
-    markdown: str = Field(default="semantic", description="Strategy for markdown files")
-    code: str = Field(default="syntax_aware", description="Strategy for code files")
-    pdf: str = Field(default="page_aware", description="Strategy for PDF files")
-    default: str = Field(default="semantic", description="Default strategy")
-
-
 class ChunkingConfig(BaseModel):
-    """Configuration for text chunking."""
+    """Configuration for text chunking (single-pass semchunk)."""
 
-    strategies: ChunkingStrategyConfig = Field(default_factory=ChunkingStrategyConfig)
     chunk_size: int = Field(default=512, description="Target chunk size in tokens")
     overlap: int = Field(default=50, description="Overlap between chunks in tokens")
     max_tokens: int = Field(default=2048, description="Maximum tokens per chunk (nomic-embed-text limit)")
@@ -47,7 +37,7 @@ class EmbeddingConfig(BaseModel):
 
     provider: str = Field(default="ollama", description="Embedding provider")
     model: str = Field(default="nomic-embed-text", description="Embedding model name")
-    batch_size: int = Field(default=10, description="Batch size for embedding")
+    batch_size: int = Field(default=32, description="Batch size for embedding (optimized)")
     url: Optional[str] = Field(default=None, description="Ollama/API URL")
 
     @field_validator('url')
@@ -68,7 +58,7 @@ class QdrantConfig(BaseModel):
     """Configuration for Qdrant vector database."""
 
     collection: str = Field(default="documentation", description="Collection name")
-    batch_size: int = Field(default=10, description="Batch upload size")
+    batch_size: int = Field(default=100, description="Batch upload size (optimized)")
     url: str = Field(default_factory=_get_qdrant_url, description="Qdrant URL")
     api_key: Optional[str] = Field(default_factory=_get_qdrant_api_key, description="API key if required")
 
@@ -259,24 +249,20 @@ extraction:
   max_file_size: 104857600  # 100MB
 
 chunking:
-  strategies:
-    markdown: semantic
-    code: syntax_aware
-    pdf: page_aware
-    default: semantic
+  # Single-pass semantic chunking with semchunk
   chunk_size: 512
   overlap: 50
   max_tokens: 2048
 
 embedding:
   provider: ollama
-  model: nomic-embed-text
-  batch_size: 10
+  model: nomic-embed-text  # Configurable via EMBEDDING_MODEL env
+  batch_size: 32  # Optimized for throughput
   # url: http://localhost:11434  # Defaults from env OLLAMA_URL
 
 qdrant:
   collection: documentation
-  batch_size: 10
+  batch_size: 100  # Optimized for throughput
   # url: http://localhost:6333  # Defaults from env QDRANT_URL
   # api_key: null  # Defaults from env QDRANT_API_KEY
 
