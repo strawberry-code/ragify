@@ -48,3 +48,9 @@ docker-compose.yml
 !docker/users.yaml.example
 !docker-compose.yml.example
 !.env.example
+
+# Pre-downloaded build dependencies (for local builds)
+ollama-linux-*.tgz
+qdrant-*.tar.gz
+tika-server*.jar
+*.zip
