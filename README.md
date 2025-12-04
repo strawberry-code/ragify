@@ -94,6 +94,7 @@ docker compose up -d
 | `OLLAMA_MODEL` | `nomic-embed-text` | Embedding model |
 | `CHUNK_SIZE` | `400` | Target chunk size in tokens |
 | `CHUNK_MAX_TOKENS` | `1500` | Maximum chunk size (safe margin for nomic-embed-text 2048 limit) |
+| `EMBEDDING_BATCH_SIZE` | `10` | Chunks per embedding API call (reduce if Ollama errors) |
 
 ## Features
 

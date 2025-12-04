@@ -7,6 +7,12 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.3.1] - 2025-12-04
+
+### Fixed
+- Reduced default EMBEDDING_BATCH_SIZE from 32 to 10 to prevent Ollama "cannot decode batches" errors with large uploads
+- New `EMBEDDING_BATCH_SIZE` env var allows tuning for different Ollama configurations
+
 ## [1.3.0] - 2025-12-04
 
 ### Changed

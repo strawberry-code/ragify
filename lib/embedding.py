@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://localhost:11434')
 EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'nomic-embed-text')
 MAX_TOKENS = 2048  # nomic-embed-text context limit (configurable models may differ)
+EMBEDDING_BATCH_SIZE = int(os.getenv('EMBEDDING_BATCH_SIZE', '10'))  # Reduced from 32 to avoid Ollama batch decode errors
 
 
 def get_embedding(text: str, timeout: int = 60, max_retries: int = 3) -> Optional[list[float]]:
@@ -240,7 +241,7 @@ def safe_embed_chunk(
 def batch_embed_chunks(
     chunks: list[dict],
     max_tokens: int = MAX_TOKENS,
-    batch_size: int = 32
+    batch_size: int = EMBEDDING_BATCH_SIZE
 ) -> list[dict]:
     """
     Embed multiple chunks using batch API for better performance.
@@ -251,7 +252,7 @@ def batch_embed_chunks(
     Args:
         chunks: List of chunk dictionaries with 'text' key
         max_tokens: Maximum tokens per chunk
-        batch_size: Number of texts to embed in a single API call (default: 32)
+        batch_size: Number of texts to embed per API call (default: EMBEDDING_BATCH_SIZE env or 10)
 
     Returns:
         List of successfully embedded chunks (flattened if re-chunking occurred)
