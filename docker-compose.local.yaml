@@ -1,0 +1,14 @@
+services:
+  ragify:
+    image: ragify:test
+    ports:
+      - "8080:8080"   # API + Web UI
+      - "6333:6333"   # Qdrant (opzionale, per debug)
+    environment:
+      - TIKA_ENABLED=true
+    volumes:
+      - ragify_data:/data
+    restart: unless-stopped
+
+volumes:
+  ragify_data:

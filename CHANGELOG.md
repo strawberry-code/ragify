@@ -7,6 +7,15 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.3.0] - 2025-12-04
+
+### Changed
+- Frontend semplificato: rimosso upload cartelle, ora richiede file ZIP per caricare multiple documenti
+- Rimossa dipendenza JSZip dal frontend (compressione ora gestita dall'utente)
+
+### Added
+- Modale informativa quando si tenta di trascinare una cartella, con istruzioni per creare ZIP
+
 ## [1.2.3] - 2025-12-03
 
 ### Fixed

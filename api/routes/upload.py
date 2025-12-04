@@ -364,7 +364,7 @@ def run_zip_indexing(job_id: str, zip_path: Path, collection_dir: Path, collecti
         # Remove ZIP after extraction
         zip_path.unlink()
 
-        logger.info(f"[{job_id}] Extracted {len(extracted_files)} files from ZIP")
+        logger.info(f"[{job_id}] Extracted {len(extracted_files)} files from ZIP: {extracted_files}")
         jobs[job_id]["message"] = f"Extracted {len(extracted_files)} files"
         jobs[job_id]["progress"] = 0.15
         jobs[job_id]["filename"] = f"{len(extracted_files)} files"

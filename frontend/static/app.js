@@ -1,6 +1,6 @@
 /**
  * Ragify Frontend Application
- * Alpine.js + HTMX based SPA
+ * Alpine.js based SPA
  */
 
 function ragifyApp() {
@@ -25,8 +25,7 @@ function ragifyApp() {
         uploadQueue: [],
         uploading: false,
         dragOver: false,
-        uploadPhase: '', // 'zipping', 'uploading', ''
-        uploadLocalProgress: 0,
+        showFolderError: false,
 
         // Search
         searchCollection: '',
@@ -68,15 +67,12 @@ function ragifyApp() {
             try {
                 const res = await fetch('/api/collections', { credentials: 'include' });
                 const data = await res.json();
-                console.log('API response:', data);
                 this.collections = data.collections || [];
-                console.log('Collections loaded:', this.collections);
 
                 // Update stats
                 this.stats.collections = this.collections.length;
                 this.stats.chunks = this.collections.reduce((sum, c) => sum + (c.points_count || 0), 0);
                 this.stats.documents = this.collections.reduce((sum, c) => sum + (c.documents_count || 0), 0);
-                console.log('Stats updated:', this.stats);
 
                 // Set default upload/search collection if not set or invalid
                 if (this.collections.length > 0) {
@@ -87,7 +83,6 @@ function ragifyApp() {
                     if (!this.searchCollection || !collectionNames.includes(this.searchCollection)) {
                         this.searchCollection = this.collections[0].name;
                     }
-                    console.log('Default collections set:', this.uploadCollection, this.searchCollection);
                 }
             } catch (e) {
                 console.error('Failed to load collections:', e);
@@ -158,22 +153,31 @@ function ragifyApp() {
             }
         },
 
-        // Upload
+        // Upload - simplified: files only, no folder handling
         handleDrop(event) {
             this.dragOver = false;
-            const files = event.dataTransfer.files;
-            this.addFilesToQueue(files);
+
+            // Check if any dropped item is a folder
+            const items = event.dataTransfer.items;
+            for (const item of items) {
+                const entry = item.webkitGetAsEntry && item.webkitGetAsEntry();
+                if (entry && entry.isDirectory) {
+                    this.showFolderError = true;
+                    return; // Block upload
+                }
+            }
+
+            this.addFilesToQueue(event.dataTransfer.files);
         },
 
         handleFileSelect(event) {
-            const files = event.target.files;
-            this.addFilesToQueue(files);
+            this.addFilesToQueue(event.target.files);
             event.target.value = ''; // Reset input
         },
 
         addFilesToQueue(files) {
             for (const file of files) {
-                // Avoid duplicates
+                // Avoid duplicates by name
                 if (!this.uploadQueue.find(f => f.name === file.name)) {
                     this.uploadQueue.push(file);
                 }
@@ -184,15 +188,10 @@ function ragifyApp() {
             if (this.uploadQueue.length === 0 || this.uploading) return;
             this.uploading = true;
 
-            // Decide: ZIP if multiple files OR total size > 5MB
-            const totalSize = this.uploadQueue.reduce((sum, f) => sum + f.size, 0);
-            const shouldZip = this.uploadQueue.length > 1 || totalSize > 5 * 1024 * 1024;
-
             try {
-                if (shouldZip) {
-                    await this.uploadAsZip();
-                } else {
-                    await this.uploadSingleFile();
+                // Upload each file - ZIP files go to /api/upload-zip, others to /api/upload
+                for (const file of this.uploadQueue) {
+                    await this.uploadFile(file);
                 }
             } catch (e) {
                 this.showToast(`Upload failed: ${e.message || 'Unknown error'}`, 'error');
@@ -200,21 +199,18 @@ function ragifyApp() {
 
             this.uploadQueue = [];
             this.uploading = false;
-            this.uploadPhase = '';
-            this.uploadLocalProgress = 0;
             await this.loadJobs();
         },
 
-        async uploadSingleFile() {
-            const file = this.uploadQueue[0];
-            this.uploadPhase = 'uploading';
-            this.uploadLocalProgress = 0;
+        async uploadFile(file) {
+            const isZip = file.name.toLowerCase().endsWith('.zip');
+            const endpoint = isZip ? '/api/upload-zip' : '/api/upload';
 
             const formData = new FormData();
             formData.append('file', file);
             formData.append('collection', this.uploadCollection);
 
-            const res = await fetch('/api/upload', {
+            const res = await fetch(endpoint, {
                 method: 'POST',
                 body: formData,
                 credentials: 'include'
@@ -222,48 +218,8 @@ function ragifyApp() {
 
             if (res.ok) {
                 const data = await res.json();
-                this.showToast(`Uploaded: ${file.name} (Job: ${data.job_id?.slice(0,8) || 'queued'})`, 'success');
-            } else {
-                const error = await res.json().catch(() => ({}));
-                throw new Error(error.detail || res.statusText);
-            }
-        },
-
-        async uploadAsZip() {
-            // Phase 1: Zipping
-            this.uploadPhase = 'zipping';
-            this.uploadLocalProgress = 0;
-
-            const zip = new JSZip();
-            for (const file of this.uploadQueue) {
-                zip.file(file.name, file);
-            }
-
-            const blob = await zip.generateAsync({
-                type: 'blob',
-                compression: 'DEFLATE',
-                compressionOptions: { level: 6 }
-            }, (meta) => {
-                this.uploadLocalProgress = meta.percent / 100;
-            });
-
-            // Phase 2: Uploading
-            this.uploadPhase = 'uploading';
-            this.uploadLocalProgress = 0;
-
-            const formData = new FormData();
-            formData.append('file', blob, 'upload.zip');
-            formData.append('collection', this.uploadCollection);
-
-            const res = await fetch('/api/upload-zip', {
-                method: 'POST',
-                body: formData,
-                credentials: 'include'
-            });
-
-            if (res.ok) {
-                const data = await res.json();
-                this.showToast(`Uploaded ${this.uploadQueue.length} files as ZIP (Job: ${data.job_id?.slice(0,8) || 'queued'})`, 'success');
+                const jobInfo = data.job_id ? ` (Job: ${data.job_id.slice(0,8)})` : '';
+                this.showToast(`Uploaded: ${file.name}${jobInfo}`, 'success');
             } else {
                 const error = await res.json().catch(() => ({}));
                 throw new Error(error.detail || res.statusText);

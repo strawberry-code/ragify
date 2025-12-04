@@ -313,6 +313,16 @@ body {
     background: linear-gradient(180deg, #ffc970 0%, var(--amber) 100%);
 }
 
+.btn-secondary {
+    background: linear-gradient(180deg, var(--text) 0%, #555 100%);
+    color: var(--panel-bg);
+    border-color: #555;
+}
+
+.btn-secondary:hover {
+    background: linear-gradient(180deg, #888 0%, var(--text) 100%);
+}
+
 .btn-danger {
     background: linear-gradient(180deg, var(--red) 0%, #8b0000 100%);
     border-color: #8b0000;
@@ -713,6 +723,27 @@ body {
     text-align: center;
     margin-bottom: 1rem;
     line-height: 1.5;
+}
+
+.modal-icon {
+    text-align: center;
+    margin-bottom: 1rem;
+    color: var(--amber);
+}
+
+.modal-hint {
+    background: var(--gauge-bg);
+    border: 1px solid var(--metal);
+    border-radius: 4px;
+    padding: 0.75rem 1rem;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.modal-hint code {
+    color: var(--green);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 0.9rem;
 }
 
 .form-actions {

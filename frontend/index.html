@@ -6,7 +6,6 @@
     <title>Ragify - Control Board</title>
     <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
     <link rel="apple-touch-icon" href="/static/favicon.svg">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="/static/style.css">
 </head>
@@ -144,9 +143,9 @@
                      @drop.prevent="handleDrop($event)"
                      :class="{ 'dragover': dragOver }">
                     <div class="dropzone-content">
-                        <p>Drop files here</p>
+                        <p>Drop files or ZIP here</p>
                         <label class="btn btn-primary">
-                            Browse
+                            Select Files
                             <input type="file" @change="handleFileSelect($event)" multiple hidden>
                         </label>
                     </div>
@@ -165,13 +164,6 @@
                     </button>
                 </div>
 
-                <!-- Local Upload Progress (browser-side) -->
-                <div class="upload-local-progress" x-show="uploadPhase">
-                    <div class="upload-phase-label" x-text="uploadPhase === 'zipping' ? 'Zipping files...' : uploadPhase === 'uploading' ? 'Uploading...' : ''"></div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" :style="'width: ' + (uploadLocalProgress * 100) + '%'"></div>
-                    </div>
-                </div>
             </section>
 
             <!-- Jobs Panel -->
@@ -210,6 +202,30 @@
                     </svg>
                     Login with GitHub
                 </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Folder Upload Error Modal -->
+    <div class="modal" x-show="showFolderError" @click.self="showFolderError = false">
+        <div class="modal-content">
+            <div class="modal-icon">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
+                    <line x1="12" y1="11" x2="12" y2="15"/>
+                    <circle cx="12" cy="17" r="0.5" fill="currentColor"/>
+                </svg>
+            </div>
+            <h2>Folder Upload Not Supported</h2>
+            <p class="modal-description">
+                Direct folder upload is not supported.<br>
+                Please <strong>compress your folder into a ZIP file</strong> and upload the ZIP instead.
+            </p>
+            <div class="modal-hint">
+                <code>zip -r my-folder.zip my-folder/</code>
+            </div>
+            <div class="form-actions">
+                <button type="button" @click="showFolderError = false" class="btn btn-primary">Got it</button>
             </div>
         </div>
     </div>
