@@ -7,6 +7,11 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [1.3.2] - 2025-12-04
+
+### Fixed
+- Further reduced default EMBEDDING_BATCH_SIZE from 10 to 3 (batch_size × chunk_tokens must be < 2048)
+
 ## [1.3.1] - 2025-12-04
 
 ### Fixed

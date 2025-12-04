@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 OLLAMA_URL = os.getenv('OLLAMA_URL', 'http://localhost:11434')
 EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'nomic-embed-text')
 MAX_TOKENS = 2048  # nomic-embed-text context limit (configurable models may differ)
-EMBEDDING_BATCH_SIZE = int(os.getenv('EMBEDDING_BATCH_SIZE', '10'))  # Reduced from 32 to avoid Ollama batch decode errors
+EMBEDDING_BATCH_SIZE = int(os.getenv('EMBEDDING_BATCH_SIZE', '3'))  # Low default: batch_size * avg_chunk_tokens must be < 2048
 
 
 def get_embedding(text: str, timeout: int = 60, max_retries: int = 3) -> Optional[list[float]]:
