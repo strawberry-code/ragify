@@ -111,6 +111,46 @@ start_ollama() {
     log_info "Model $MODEL is available"
 }
 
+# Start Tika Server
+start_tika() {
+    log_info "Starting Apache Tika server..."
+
+    # Find Tika JAR (handles versioned names)
+    TIKA_JAR="${TIKA_JAR_PATH:-/tmp/tika-server.jar}"
+
+    if [ ! -f "$TIKA_JAR" ]; then
+        # Try to find versioned JAR
+        TIKA_JAR=$(find /tmp -name 'tika-server*.jar' -type f 2>/dev/null | head -1)
+    fi
+
+    if [ -z "$TIKA_JAR" ] || [ ! -f "$TIKA_JAR" ]; then
+        log_error "Tika JAR not found. Expected at: ${TIKA_JAR_PATH:-/tmp/tika-server.jar}"
+        exit 1
+    fi
+
+    log_info "Using Tika JAR: $TIKA_JAR"
+
+    # Start Tika server on port 9998
+    java -jar "$TIKA_JAR" --port 9998 --host 0.0.0.0 &
+    TIKA_PID=$!
+
+    # Wait for Tika to be ready
+    log_info "Waiting for Tika server to be ready..."
+    for i in {1..60}; do
+        if curl -sf http://localhost:9998/version > /dev/null 2>&1; then
+            TIKA_VERSION=$(curl -sf http://localhost:9998/version 2>/dev/null || echo "unknown")
+            log_info "Tika server is ready (PID: $TIKA_PID, version: $TIKA_VERSION)"
+            # Set environment variable for Python code
+            export TIKA_SERVER_ENDPOINT="http://localhost:9998"
+            return 0
+        fi
+        sleep 1
+    done
+
+    log_error "Tika server failed to start within 60 seconds"
+    exit 1
+}
+
 # Start FastAPI
 start_api() {
     log_info "Starting FastAPI API server..."
@@ -137,6 +177,7 @@ cleanup() {
     log_info "Shutting down..."
     [ -n "$QDRANT_PID" ] && kill $QDRANT_PID 2>/dev/null || true
     [ -n "$OLLAMA_PID" ] && kill $OLLAMA_PID 2>/dev/null || true
+    [ -n "$TIKA_PID" ] && kill $TIKA_PID 2>/dev/null || true
     exit 0
 }
 
@@ -147,6 +188,7 @@ main() {
     validate_config
     start_qdrant
     start_ollama
+    start_tika  # Tika server sempre attivo
     start_api
 }
 

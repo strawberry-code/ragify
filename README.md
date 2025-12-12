@@ -7,24 +7,23 @@
 
 All-in-one container for semantic document search. Index your docs, search with AI embeddings.
 
-**Includes:** Ollama + nomic-embed-text, Qdrant vector DB, REST API, Web UI, MCP server.
+**Includes:** Ollama + nomic-embed-text, Qdrant vector DB, Apache Tika, REST API, Web UI, MCP server.
 
 ## Quick Start
 
 ```bash
-docker pull ghcr.io/strawberry-code/ragify:latest-tika
+docker pull ghcr.io/strawberry-code/ragify:latest
 docker run -d --name ragify -p 8080:8080 -v ragify_data:/data \
-  ghcr.io/strawberry-code/ragify:latest-tika
+  ghcr.io/strawberry-code/ragify:latest
 ```
 
 Open http://localhost:8080 - upload files and search.
 
-## Image Variants
+## Supported Formats
 
-| Image | Size | Description |
-|-------|------|-------------|
-| `ragify:latest` | ~3GB | Text and code files only |
-| `ragify:latest-tika` | ~4GB | **Recommended** - PDF, DOCX, XLSX, and 1000+ formats via Apache Tika |
+PDF, DOCX, XLSX, PPTX, ODT, RTF, EPUB, TXT, MD, JSON, YAML, XML, HTML, and 1000+ more via Apache Tika.
+
+All code files: `.py`, `.js`, `.ts`, `.java`, `.go`, `.rs`, `.c`, `.cpp`, etc.
 
 ## Production Setup with OAuth
 
@@ -46,7 +45,7 @@ For production, enable GitHub OAuth to restrict access.
 ```yaml
 services:
   ragify:
-    image: ghcr.io/strawberry-code/ragify:latest-tika
+    image: ghcr.io/strawberry-code/ragify:latest
     container_name: ragify
     ports:
       - "8080:8080"
@@ -93,8 +92,9 @@ docker compose up -d
 | `API_PORT` | `8080` | API and Web UI port |
 | `OLLAMA_MODEL` | `nomic-embed-text` | Embedding model |
 | `CHUNK_SIZE` | `400` | Target chunk size in tokens |
-| `CHUNK_MAX_TOKENS` | `1500` | Maximum chunk size (safe margin for nomic-embed-text 2048 limit) |
-| `EMBEDDING_BATCH_SIZE` | `3` | Chunks per embedding API call (batch_size × chunk_tokens < 2048) |
+| `CHUNK_MAX_TOKENS` | `1500` | Maximum chunk size |
+| `EMBEDDING_BATCH_SIZE` | `20` | Max chunks per embedding API call |
+| `EMBEDDING_TOKEN_BUDGET` | `1800` | Max tokens per batch (dynamic batching) |
 
 ## Features
 
@@ -147,7 +147,7 @@ The container exposes an MCP endpoint for Claude integration.
 │                                                                      │
 │  ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────────┐   │
 │  │  Upload  │───►│  Tika    │───►│ Chunking │───►│  Embedding   │   │
-│  │  (file)  │    │ Extract  │    │ 2-stage  │    │ nomic-embed  │   │
+│  │  (file)  │    │ Server   │    │ Semantic │    │ nomic-embed  │   │
 │  └──────────┘    └──────────┘    └──────────┘    └──────┬───────┘   │
 │                                                          │          │
 │                                                          ▼          │
@@ -161,20 +161,11 @@ The container exposes an MCP endpoint for Claude integration.
 ### Pipeline Steps
 
 1. **Upload** - Files uploaded via Web UI or API
-2. **Extraction** - Apache Tika extracts text from PDF, DOCX, XLSX, etc. (tika variant only)
-3. **Chunking** - Two-stage semantic chunking:
-   - Stage 1: Macro chunks with Chonkie (1024 tokens)
-   - Stage 2: Fine chunks with Semchunk (512 tokens, 50 overlap)
-   - Filter: Validates chunk quality, re-chunks if > 8192 tokens
-4. **Embedding** - Ollama generates 768-dim vectors with nomic-embed-text
-5. **Storage** - Vectors stored in Qdrant with metadata (file hash, URL, title)
-6. **Deduplication** - SHA-256 file hash prevents re-indexing unchanged files
-
-### Supported Formats
-
-**Base image:** `.txt`, `.md`, `.py`, `.js`, `.ts`, `.java`, `.go`, `.rs`, `.c`, `.cpp`, `.json`, `.yaml`, `.xml`, `.html`, `.css`
-
-**Tika image (additional):** `.pdf`, `.docx`, `.xlsx`, `.pptx`, `.odt`, `.rtf`, `.epub`, and 1000+ more
+2. **Extraction** - Apache Tika server extracts text from all formats
+3. **Chunking** - Semantic chunking with token validation
+4. **Embedding** - Dynamic batching for optimal throughput
+5. **Storage** - Vectors stored in Qdrant with indexed file hash
+6. **Deduplication** - O(1) hash lookup prevents re-indexing
 
 ## Health Check
 
@@ -216,11 +207,10 @@ Check for:
 - Missing `AUTH_CONFIG` when OAuth env vars are set
 - Invalid `users.yaml` format
 
-### PDF files not processed
-Make sure you're using the `-tika` image variant:
-```bash
-docker pull ghcr.io/strawberry-code/ragify:latest-tika
-```
+### Slow indexing
+The container includes optimized batching. Check:
+- `EMBEDDING_BATCH_SIZE` (default 20)
+- `EMBEDDING_TOKEN_BUDGET` (default 1800)
 
 ### OAuth callback error
 Verify `BASE_URL` matches your actual domain and GitHub OAuth App callback URL.

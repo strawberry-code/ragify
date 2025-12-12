@@ -7,6 +7,36 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.0.0] - 2025-12-12
+
+### Breaking Changes
+- **Unica immagine Docker**: rimossi `Dockerfile.tika` e `Dockerfile.tika.local`, ora esiste solo `Dockerfile` con Tika integrato
+- **Tika sempre obbligatorio**: rimosso flag `--no-tika` e logica opzionale, Tika server sempre attivo
+- **Tag immagine semplificato**: usare `ghcr.io/strawberry-code/ragify:latest` (rimosso suffisso `-tika`)
+
+### Added
+- **Dynamic batching**: nuovo sistema di batching basato su token budget invece di batch size fisso
+- **EMBEDDING_TOKEN_BUDGET**: nuova env var (default 1800) per controllare token massimi per batch
+- **Index file_hash**: creazione automatica index su Qdrant per query O(1) invece di scroll O(N)
+- **FileHashCache**: cache in-memory per evitare query ripetute durante indicizzazione
+- **Tika server mode**: Tika avviato come server all'avvio container (porta 9998), elimina cold start 5-10s per file
+
+### Changed
+- `EMBEDDING_BATCH_SIZE` default aumentato da 3 a 20 (ora funziona con token budget)
+- Health check verifica anche Tika server oltre a API, Ollama e Qdrant
+- `check_file_hash_in_qdrant()` usa `count()` O(1) invece di `scroll()` O(N)
+- Entrypoint avvia Qdrant → Ollama → Tika → API in sequenza
+
+### Removed
+- `Dockerfile.tika` e `Dockerfile.tika.local`
+- Flag `--no-tika` e `--non-interactive` da CLI
+- Logica condizionale `use_tika` in pipeline e API
+
+### Performance
+- Riduzione chiamate embedding API: ~334 → ~50-100 per 1000 chunk
+- Eliminato cold start Tika: 5-10s → 0s per file
+- Hash check O(1) con index invece di O(N) scroll
+
 ## [1.3.2] - 2025-12-04
 
 ### Fixed

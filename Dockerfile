@@ -1,4 +1,5 @@
 # Ragify All-in-One Container
+# Includes Ollama, Qdrant, Apache Tika, and Python API
 # Multi-stage build for Docker/Podman
 
 # ============================================
@@ -26,15 +27,23 @@ RUN pip install --no-cache-dir --upgrade pip && \
 FROM python:3.12-slim
 
 LABEL maintainer="Ragify"
-LABEL description="All-in-one RAG documentation search with Ollama, Qdrant, and MCP"
-LABEL version="1.0.0"
+LABEL description="All-in-one RAG documentation search with Ollama, Qdrant, MCP, and Apache Tika"
+LABEL version="2.0.0"
 
-# Install runtime dependencies
+# Install runtime dependencies including Java for Tika server
 RUN apt-get update && apt-get install -y --no-install-recommends \
     tini \
     curl \
     ca-certificates \
+    openjdk-21-jre-headless \
     && rm -rf /var/lib/apt/lists/*
+
+# Set Java environment (create symlink to avoid architecture-specific path)
+RUN ln -s /usr/lib/jvm/java-21-openjdk-* /usr/lib/jvm/java-21
+ENV JAVA_HOME=/usr/lib/jvm/java-21
+ENV PATH="${JAVA_HOME}/bin:${PATH}"
+# Tika JAR path (used by entrypoint.sh to start server)
+ENV TIKA_JAR_PATH=/tmp/tika-server.jar
 
 # Install Ollama - pinned to v0.11.0 to avoid embedding bugs in 0.12.x/0.13.x
 # See: https://github.com/ollama/ollama/issues/13054
@@ -78,12 +87,39 @@ COPY docker/ ./docker/
 # Make scripts executable
 RUN chmod +x /app/docker/*.sh
 
-# Pre-pull default Ollama model (makes container larger but faster startup)
-# This runs ollama serve temporarily to pull the model
+# Pre-pull default Ollama model
 RUN ollama serve & \
     sleep 5 && \
     ollama pull nomic-embed-text && \
     pkill ollama || true
+
+# Pre-download Tika JAR and ensure it's in the expected location
+RUN python3 <<'PYEOF'
+import os
+import glob
+from tika import parser
+
+# Trigger download (this downloads JAR to /tmp/)
+parser.from_buffer(b'test', xmlContent=False)
+
+# Find the JAR file (handles versioned names like tika-server-standard-3.1.0.jar)
+expected_path = '/tmp/tika-server.jar'
+if os.path.exists(expected_path):
+    print(f'Tika JAR found at {expected_path}')
+else:
+    # Search for versioned JAR
+    jars = glob.glob('/tmp/tika-server*.jar')
+    if jars:
+        print(f'Found JAR: {jars[0]}')
+        os.symlink(jars[0], expected_path)
+        print(f'Created symlink: {expected_path} -> {jars[0]}')
+    else:
+        raise Exception('No Tika JAR found in /tmp/')
+
+# Final verification
+assert os.path.exists(expected_path), f'Tika JAR not found at {expected_path}'
+print(f'Tika JAR verified at {expected_path}')
+PYEOF
 
 # Create data directory for Qdrant
 RUN mkdir -p /data/qdrant
@@ -100,7 +136,9 @@ ENV PYTHONUNBUFFERED=1 \
     # Qdrant (internal)
     QDRANT_URL=http://localhost:6333 \
     QDRANT_PATH=/data/qdrant \
-    # Auth (must be provided)
+    # Tika server (internal - started by entrypoint.sh)
+    TIKA_SERVER_ENDPOINT=http://localhost:9998 \
+    # Auth (must be provided for production)
     AUTH_CONFIG="" \
     GITHUB_CLIENT_ID="" \
     GITHUB_CLIENT_SECRET="" \
@@ -112,12 +150,12 @@ VOLUME ["/data"]
 # Expose ports
 EXPOSE 8080 6666
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+# Health check (verifies API, Ollama, Qdrant, Tika)
+HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
     CMD /app/docker/healthcheck.sh
 
 # Use tini as init
 ENTRYPOINT ["/usr/bin/tini", "--"]
 
-# Run entrypoint script
+# Run entrypoint script (starts Qdrant, Ollama, Tika, API)
 CMD ["/app/docker/entrypoint.sh"]

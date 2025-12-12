@@ -122,16 +122,8 @@ def run_indexing(job_id: str, collection_dir: Path, collection: str, filenames: 
         config = RagifyConfig.default()
         config.qdrant.collection = collection
 
-        # Check Tika availability with diagnostic info
-        tika_status = check_tika_available()
-        use_tika = tika_status['can_use_tika']
-        logger.info(f"[{job_id}] Tika status: java={tika_status['java_installed']}, "
-                    f"jar={tika_status['tika_jar_available']}, path={tika_status.get('tika_jar_path')}")
-        if tika_status['issues']:
-            logger.warning(f"[{job_id}] Tika issues: {tika_status['issues']}")
-
         jobs[job_id]["progress"] = 0.2
-        jobs[job_id]["message"] = f"Processing with {'Tika' if use_tika else 'text-only'} mode"
+        jobs[job_id]["message"] = "Processing with Tika server"
         jobs[job_id]["stage"] = "initializing"
 
         # Progress callback to update job stage
@@ -139,8 +131,8 @@ def run_indexing(job_id: str, collection_dir: Path, collection: str, filenames: 
             jobs[job_id]["stage"] = stage
             jobs[job_id]["progress"] = progress
 
-        # Create and run pipeline
-        pipeline = RagifyPipeline(config, use_tika=use_tika)
+        # Create and run pipeline (Tika always enabled via server)
+        pipeline = RagifyPipeline(config)
         stats = pipeline.process_directory(collection_dir, progress_callback=update_progress)
 
         # Update job with results
@@ -385,11 +377,6 @@ def run_zip_indexing(job_id: str, zip_path: Path, collection_dir: Path, collecti
         config = RagifyConfig.default()
         config.qdrant.collection = collection
 
-        # Check Tika availability
-        tika_status = check_tika_available()
-        use_tika = tika_status['can_use_tika']
-        logger.info(f"[{job_id}] Tika available: {use_tika}")
-
         # Progress callback
         def update_progress(stage: str, progress: float):
             # Scale progress: extraction was 0-0.15, pipeline is 0.15-1.0
@@ -397,8 +384,8 @@ def run_zip_indexing(job_id: str, zip_path: Path, collection_dir: Path, collecti
             jobs[job_id]["stage"] = stage
             jobs[job_id]["progress"] = scaled_progress
 
-        # Run pipeline
-        pipeline = RagifyPipeline(config, use_tika=use_tika)
+        # Run pipeline (Tika always enabled via server)
+        pipeline = RagifyPipeline(config)
         stats = pipeline.process_directory(collection_dir, progress_callback=update_progress)
 
         # Update job with results

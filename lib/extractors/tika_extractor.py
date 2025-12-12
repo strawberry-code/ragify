@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Apache Tika-based universal text extractor.
-Handles all file formats through Tika's powerful extraction capabilities.
+Handles all file formats through Tika server (always required).
 """
 
 import logging
@@ -13,15 +13,18 @@ from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# Optional: try importing tika
+# Tika server endpoint (default: localhost:9998, avviato da entrypoint.sh)
+TIKA_SERVER_ENDPOINT = os.getenv('TIKA_SERVER_ENDPOINT', 'http://localhost:9998')
+
+# Import tika (required)
 try:
     from tika import parser as tika_parser
     from tika import tika
-    # Configure Tika to auto-download if needed
-    tika.TikaClientOnly = False
+    # Usa sempre server mode per performance ottimali
+    tika.TikaClientOnly = True  # Forza client-only mode (usa server)
     TIKA_AVAILABLE = True
 except ImportError:
-    logger.warning("Apache Tika not available, using fallback extractors only")
+    logger.error("Apache Tika is required but not installed. Run: pip install tika")
     TIKA_AVAILABLE = False
 
 
@@ -73,21 +76,12 @@ class TikaExtractor:
             # Standard extraction for smaller files
             logger.debug(f"Extracting content from: {file_path}")
 
-            # Parse with Tika
-            # Only use serverEndpoint if explicitly set
-            server_endpoint = os.getenv('TIKA_SERVER_ENDPOINT')
-            if server_endpoint:
-                parsed = tika_parser.from_file(
-                    str(file_path),
-                    serverEndpoint=server_endpoint,
-                    requestOptions={'timeout': self.timeout}
-                )
-            else:
-                # Use local JAR (auto-downloaded)
-                parsed = tika_parser.from_file(
-                    str(file_path),
-                    requestOptions={'timeout': self.timeout}
-                )
+            # Parse with Tika server (sempre attivo)
+            parsed = tika_parser.from_file(
+                str(file_path),
+                serverEndpoint=TIKA_SERVER_ENDPOINT,
+                requestOptions={'timeout': self.timeout}
+            )
 
             # Extract text
             text = parsed.get('content', '').strip()
@@ -125,20 +119,12 @@ class TikaExtractor:
             with open(file_path, 'rb') as f:
                 # Memory map the file
                 with mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mmapped_file:
-                    # Tika can work with file path directly
-                    # Memory mapping helps with system resource management
-                    server_endpoint = os.getenv('TIKA_SERVER_ENDPOINT')
-                    if server_endpoint:
-                        parsed = tika_parser.from_file(
-                            str(file_path),
-                            serverEndpoint=server_endpoint,
-                            requestOptions={'timeout': self.timeout}
-                        )
-                    else:
-                        parsed = tika_parser.from_file(
-                            str(file_path),
-                            requestOptions={'timeout': self.timeout}
-                        )
+                    # Parse with Tika server (sempre attivo)
+                    parsed = tika_parser.from_file(
+                        str(file_path),
+                        serverEndpoint=TIKA_SERVER_ENDPOINT,
+                        requestOptions={'timeout': self.timeout}
+                    )
 
                     text = parsed.get('content', '').strip()
                     raw_metadata = parsed.get('metadata', {})

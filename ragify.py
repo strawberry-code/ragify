@@ -46,7 +46,11 @@ from lib.file_utils import (
     format_file_size,
     scan_directory,
 )
-from lib.qdrant_operations import create_point
+from lib.qdrant_operations import (
+    create_point,
+    ensure_file_hash_index,
+    FileHashCache as QdrantFileHashCache,
+)
 
 # Try importing qdrant-client for hash checking
 try:
@@ -86,19 +90,17 @@ class PipelineStats:
 class RagifyPipeline:
     """Main pipeline orchestrator for Ragify."""
 
-    def __init__(self, config: RagifyConfig, use_tika: bool = True):
+    def __init__(self, config: RagifyConfig):
         """Initialize pipeline with configuration."""
         self.config = config
-        self.use_tika = use_tika
         self.stats = PipelineStats()
-        self.hash_cache = FileHashCache()
+        # Usa la nuova cache ottimizzata da qdrant_operations
+        self.hash_cache = QdrantFileHashCache()
         self.logger = self._setup_logging()
         self.qdrant_client = self._setup_qdrant_client()
 
-        # Configure extractors based on Tika availability
-        set_tika_enabled(use_tika)
-        if not use_tika:
-            self.logger.info("⚠️  Running without Tika (text/code files only)")
+        # Tika sempre attivo via server (TIKA_SERVER_ENDPOINT)
+        set_tika_enabled(True)
 
     def _setup_logging(self) -> logging.Logger:
         """Setup structured logging based on configuration."""
@@ -150,38 +152,16 @@ class RagifyPipeline:
         """
         Check if file hash exists in Qdrant.
 
+        Ottimizzato: usa cache locale + count() O(1) invece di scroll() O(N).
+
         Args:
             file_hash: SHA-256 hash of file
 
         Returns:
             True if file already indexed, False otherwise
         """
-        if not self.qdrant_client:
-            return False
-
-        try:
-            # Search for documents with this hash
-            results = self.qdrant_client.scroll(
-                collection_name=self.config.qdrant.collection,
-                scroll_filter=models.Filter(
-                    must=[
-                        models.FieldCondition(
-                            key="file_hash",
-                            match=models.MatchValue(value=file_hash)
-                        )
-                    ]
-                ),
-                limit=1
-            )
-            return len(results[0]) > 0
-
-        except Exception as e:
-            # If collection doesn't exist or other error, assume file not indexed
-            if "doesn't exist" in str(e) or "Not found" in str(e):
-                self.logger.debug(f"Collection {self.config.qdrant.collection} doesn't exist yet, skipping hash check")
-                return False
-            self.logger.debug(f"Hash check failed: {e}")
-            return False
+        # Usa la nuova cache ottimizzata con count() invece di scroll()
+        return self.hash_cache.check(file_hash, self.config.qdrant.collection)
 
     def _ensure_collection_exists(self) -> None:
         """Ensure Qdrant collection exists, create if needed."""
@@ -209,6 +189,9 @@ class RagifyPipeline:
                 self.logger.info(f"✅ Collection created: {self.config.qdrant.collection}")
             else:
                 self.logger.debug(f"Collection already exists: {self.config.qdrant.collection}")
+
+            # Crea/verifica index su file_hash per query O(1) di deduplicazione
+            ensure_file_hash_index(self.config.qdrant.collection)
 
         except Exception as e:
             self.logger.warning(f"Failed to ensure collection exists: {e}")
@@ -371,6 +354,8 @@ class RagifyPipeline:
         if success:
             self.stats.processed_files += 1
             self.stats.total_chunks += len(embedded_chunks)
+            # Aggiorna cache locale per evitare query Qdrant ripetute
+            self.hash_cache.mark_indexed(file_hash)
             self.logger.info(f"✅ Processed: {file_path.name} ({len(embedded_chunks)} chunks)")
         else:
             self.stats.failed_files += 1
@@ -504,8 +489,6 @@ Environment variables:
     index_parser.add_argument('--batch-size', type=int, help='Override batch size')
     index_parser.add_argument('--collection', help='Override collection name')
     index_parser.add_argument('-v', '--verbose', action='store_true', help='Verbose output')
-    index_parser.add_argument('--no-tika', action='store_true', help='Skip Tika, process only text/code files')
-    index_parser.add_argument('--non-interactive', action='store_true', help='Non-interactive mode (no prompts)')
 
     # Init config command
     init_parser = subparsers.add_parser('init-config', help='Create default configuration file')
@@ -832,14 +815,6 @@ Environment variables:
         sys.exit(0)
 
     if args.command == 'index':
-        # Check Tika availability first
-        from lib.tika_check import ensure_tika_ready
-
-        use_tika = ensure_tika_ready(
-            interactive=not args.non_interactive,
-            auto_skip=args.no_tika
-        )
-
         # Load configuration
         if args.config and args.config.exists():
             config = RagifyConfig.load(args.config)
@@ -849,7 +824,7 @@ Environment variables:
         # Merge CLI arguments
         cli_args = {
             k: v for k, v in vars(args).items()
-            if v is not None and k not in ['command', 'directory', 'config', 'no_tika', 'non_interactive']
+            if v is not None and k not in ['command', 'directory', 'config']
         }
         config = merge_cli_args(config, cli_args)
 
@@ -882,8 +857,8 @@ Environment variables:
 
         print("✅ All services connected successfully\n")
 
-        # Run pipeline with Tika flag
-        pipeline = RagifyPipeline(config, use_tika=use_tika)
+        # Run pipeline (Tika always enabled via server)
+        pipeline = RagifyPipeline(config)
         stats = pipeline.process_directory(args.directory)
 
         # Exit with appropriate code

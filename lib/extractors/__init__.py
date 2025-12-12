@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Text extraction system using Apache Tika.
-Provides universal file format support with fallback mechanisms.
+Text extraction system using Apache Tika server.
+Tika is always required and runs as a server for optimal performance.
 """
 
 import logging
@@ -29,40 +29,28 @@ class ExtractorRegistry:
     def __init__(self):
         self.extractors = []
         self._tika_extractor = None
-        self._tika_enabled = True
 
     def register(self, extractor: TextExtractor):
         """Register a new extractor."""
         self.extractors.append(extractor)
 
-    def set_tika_enabled(self, enabled: bool):
-        """Enable or disable Tika fallback."""
-        self._tika_enabled = enabled
-        if not enabled:
-            self._tika_extractor = None
-
     def get_extractor(self, file_path: Path) -> Optional[TextExtractor]:
         """Get appropriate extractor for file type."""
-        # Try specific extractors first
+        # Try specific extractors first (PlainText, Code - più veloci per file semplici)
         for extractor in self.extractors:
             if extractor.can_handle(file_path):
                 return extractor
 
-        # Fallback to Tika if enabled
-        if self._tika_enabled:
-            if self._tika_extractor is None:
-                try:
-                    from .tika_extractor import TikaExtractor
-                    self._tika_extractor = TikaExtractor()
-                except Exception as e:
-                    logger.error(f"Failed to initialize Tika: {e}")
-                    return None
+        # Fallback to Tika server (sempre disponibile)
+        if self._tika_extractor is None:
+            try:
+                from .tika_extractor import TikaExtractor
+                self._tika_extractor = TikaExtractor()
+            except Exception as e:
+                logger.error(f"Failed to initialize Tika: {e}")
+                return None
 
-            return self._tika_extractor
-        else:
-            # Tika disabled, no fallback
-            logger.warning(f"No extractor found for {file_path.suffix} (Tika disabled)")
-            return None
+        return self._tika_extractor
 
     def extract(self, file_path: Path) -> Tuple[str, Dict]:
         """Extract text and metadata from any file."""
@@ -79,7 +67,7 @@ class ExtractorRegistry:
 # Global registry instance
 registry = ExtractorRegistry()
 
-# Register optimized extractors (they'll be tried before Tika)
+# Register optimized extractors (faster than Tika for simple files)
 try:
     from .tika_extractor import PlainTextExtractor, CodeExtractor
     registry.register(PlainTextExtractor())
@@ -103,10 +91,11 @@ def extract_file_content(file_path: Path) -> Tuple[str, Dict]:
 
 def set_tika_enabled(enabled: bool):
     """
-    Enable or disable Tika extractor globally.
+    Legacy function for compatibility - Tika is always enabled.
 
     Args:
-        enabled: True to enable Tika, False to disable
+        enabled: Ignored (Tika always active via server)
     """
-    registry.set_tika_enabled(enabled)
-    logger.info(f"Tika extractor: {'enabled' if enabled else 'disabled'}")
+    # Tika server è sempre attivo, questa funzione esiste solo per compatibilità
+    if not enabled:
+        logger.warning("set_tika_enabled(False) ignored - Tika server is always active")

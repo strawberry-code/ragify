@@ -198,3 +198,152 @@ def check_qdrant_connection() -> bool:
     except Exception as e:
         logger.error(f"Qdrant connection failed: {e}")
         return False
+
+
+def ensure_file_hash_index(collection_name: str) -> bool:
+    """
+    Crea index su file_hash per query O(1) invece di scroll O(N).
+
+    Chiamare una volta all'inizio del processing per ottimizzare
+    i controlli di deduplicazione.
+
+    Args:
+        collection_name: Nome della collection
+
+    Returns:
+        True se index esiste o creato, False se errore
+    """
+    headers = {}
+    if QDRANT_API_KEY:
+        headers['api-key'] = QDRANT_API_KEY
+
+    try:
+        # Crea index su file_hash field
+        response = requests.put(
+            f"{QDRANT_URL}/collections/{collection_name}/index",
+            json={
+                "field_name": "file_hash",
+                "field_schema": "keyword"  # Index ottimale per exact match
+            },
+            headers=headers,
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            logger.info(f"Index file_hash creato per {collection_name}")
+            return True
+        elif response.status_code == 400 and "already exists" in response.text.lower():
+            logger.debug(f"Index file_hash già esiste per {collection_name}")
+            return True
+        else:
+            logger.warning(f"Creazione index fallita: {response.status_code} - {response.text[:100]}")
+            return False
+
+    except Exception as e:
+        logger.debug(f"Index creation skipped: {e}")
+        return False
+
+
+def check_file_hash_exists(file_hash: str, collection_name: str) -> bool:
+    """
+    Verifica esistenza file_hash usando count() invece di scroll().
+
+    Ottimizzazione: count() è O(1) con index, scroll() è O(N).
+
+    Args:
+        file_hash: Hash SHA-256 del file
+        collection_name: Nome della collection
+
+    Returns:
+        True se hash esiste, False altrimenti
+    """
+    headers = {"Content-Type": "application/json"}
+    if QDRANT_API_KEY:
+        headers['api-key'] = QDRANT_API_KEY
+
+    try:
+        # Usa count endpoint con filter
+        response = requests.post(
+            f"{QDRANT_URL}/collections/{collection_name}/points/count",
+            json={
+                "filter": {
+                    "must": [
+                        {
+                            "key": "file_hash",
+                            "match": {"value": file_hash}
+                        }
+                    ]
+                },
+                "exact": False  # Approssimato ma veloce (ok per existence check)
+            },
+            headers=headers,
+            timeout=5
+        )
+
+        if response.status_code == 200:
+            result = response.json()
+            count = result.get("result", {}).get("count", 0)
+            return count > 0
+        else:
+            # Collection non esiste o altro errore
+            return False
+
+    except Exception as e:
+        logger.debug(f"Hash check failed: {e}")
+        return False
+
+
+class FileHashCache:
+    """
+    Cache in-memory per file hash durante una sessione di indexing.
+
+    Evita query ripetute a Qdrant per lo stesso hash nella stessa sessione.
+    Utile quando si processano file con lo stesso contenuto in directory diverse.
+    """
+
+    def __init__(self):
+        self._cache: dict[str, bool] = {}
+        self._collection: str = ""
+
+    def set_collection(self, collection_name: str):
+        """Imposta collection e resetta cache se cambiata."""
+        if self._collection != collection_name:
+            self._cache.clear()
+            self._collection = collection_name
+            logger.debug(f"Hash cache reset for collection: {collection_name}")
+
+    def check(self, file_hash: str, collection_name: str) -> bool:
+        """
+        Check se hash esiste, usando cache locale + query Qdrant.
+
+        Args:
+            file_hash: Hash da verificare
+            collection_name: Collection target
+
+        Returns:
+            True se esiste (in cache o Qdrant), False altrimenti
+        """
+        self.set_collection(collection_name)
+
+        # Check cache locale prima
+        if file_hash in self._cache:
+            return self._cache[file_hash]
+
+        # Query Qdrant
+        exists = check_file_hash_exists(file_hash, collection_name)
+
+        # Salva in cache
+        self._cache[file_hash] = exists
+        return exists
+
+    def mark_indexed(self, file_hash: str):
+        """Marca hash come indicizzato (appena uploadato)."""
+        self._cache[file_hash] = True
+
+    def stats(self) -> dict:
+        """Ritorna statistiche cache."""
+        return {
+            "collection": self._collection,
+            "cached_hashes": len(self._cache),
+            "indexed_count": sum(1 for v in self._cache.values() if v)
+        }
