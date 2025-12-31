@@ -28,7 +28,7 @@ FROM python:3.12-slim
 
 LABEL maintainer="Ragify"
 LABEL description="All-in-one RAG documentation search with Ollama, Qdrant, MCP, and Apache Tika"
-LABEL version="2.0.0"
+LABEL version="2.0.1"
 
 # Install runtime dependencies including Java for Tika server
 RUN apt-get update && apt-get install -y --no-install-recommends \

@@ -7,6 +7,16 @@ and the project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.
 
 ## [Unreleased]
 
+## [2.0.1] - 2025-12-31
+
+### Added
+- **Static API Key auth**: supporto autenticazione MCP via `X-API-Key` header o `Bearer` token statico
+- Nuova env var `MCP_API_KEY` per configurare API key statica per client MCP
+- API key validata sia come header `X-API-Key` che come `Authorization: Bearer <key>`
+
+### Fixed
+- Aggiunto `ulimits.nofile: 65536` a docker-compose.yml per prevenire errore "No file descriptors available" con upload intensivi
+
 ## [2.0.0] - 2025-12-12
 
 ### Breaking Changes
